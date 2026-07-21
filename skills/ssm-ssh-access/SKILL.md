@@ -94,3 +94,10 @@ reuses the existing key automatically instead of pushing a new one.
 - **Re-running connect.sh for the same instance** — reuses the existing local key and
   skips re-pushing, but still asks you to reconfirm the remote user, since the instance's
   users could have changed since the last run.
+- **`ssh` fails with a 403 "Server authentication failed" from `aws ssm start-session`**
+  — this usually means a different, earlier `Host` block in `~/.ssh/config` is matching
+  first and overriding ours (ssh uses first-match-wins per keyword, not most-specific-
+  match-wins). A common cause: a pre-existing generic `Host i-* mi-*` block from another
+  tool or an earlier manual setup. `connect.sh`/`connect.ps1` always prepend their marked
+  block to the top of the file for exactly this reason — if you still hit this, check for
+  another block matching the instance ID above the `# BEGIN ssm-ssh-access ...` marker.
