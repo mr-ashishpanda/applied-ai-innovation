@@ -121,7 +121,10 @@ function Update-SsmSshConfigBlock {
     $proxy = "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
     if ($Profile) { $proxy += " --profile $Profile" }
     if ($Region) { $proxy += " --region $Region" }
-    @(
+    # Prepended, not appended: ssh resolves ProxyCommand/User/IdentityFile by
+    # first match in file order, so our specific Host block must come before
+    # any pre-existing generic "Host i-*"/"Host mi-*" block or it's ignored.
+    $block = @(
         "# BEGIN ssm-ssh-access $InstanceId"
         "Host $InstanceId"
         "  User $RemoteUser"
@@ -129,5 +132,7 @@ function Update-SsmSshConfigBlock {
         "  ProxyCommand $proxy"
         "  StrictHostKeyChecking accept-new"
         "# END ssm-ssh-access $InstanceId"
-    ) | Add-Content -Path $cfg -Encoding UTF8
+    )
+    $existing = Get-Content $cfg
+    ($block + $existing) | Set-Content -Path $cfg -Encoding UTF8
 }

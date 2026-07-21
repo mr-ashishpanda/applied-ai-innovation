@@ -136,6 +136,10 @@ ssm_ssh_config_upsert_block() {
   local proxy="aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
   [ -n "$profile" ] && proxy="${proxy} --profile ${profile}"
   [ -n "$region" ] && proxy="${proxy} --region ${region}"
+  # Prepended, not appended: ssh resolves ProxyCommand/User/IdentityFile by
+  # first match in file order, so our specific Host block must come before
+  # any pre-existing generic "Host i-*"/"Host mi-*" block or it's ignored.
+  local tmp; tmp=$(mktemp)
   {
     echo "# BEGIN ssm-ssh-access ${id}"
     echo "Host ${id}"
@@ -144,5 +148,7 @@ ssm_ssh_config_upsert_block() {
     echo "  ProxyCommand ${proxy}"
     echo "  StrictHostKeyChecking accept-new"
     echo "# END ssm-ssh-access ${id}"
-  } >> "$cfg"
+    cat "$cfg"
+  } > "$tmp"
+  mv "$tmp" "$cfg"
 }
