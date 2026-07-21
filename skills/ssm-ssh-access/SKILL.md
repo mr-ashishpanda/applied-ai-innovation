@@ -36,14 +36,21 @@ closed — by tunneling the SSH session through `aws ssm start-session`.
 
 ## Usage
 
+All commands below use paths relative to **this skill's own directory** (the folder
+containing this `SKILL.md`) — not your project's working directory. This skill may be
+installed inside a repo (e.g. `skills/ssm-ssh-access/`) or as a personal/global skill
+(e.g. `~/.claude/skills/ssm-ssh-access/`); either way, `cd` into that directory first, or
+prefix each command with its absolute path, which Claude Code reports as this skill's
+base directory when it's loaded.
+
 **Connect** (macOS/Linux):
 ```bash
-skills/ssm-ssh-access/scripts/connect.sh --instance-id i-0123456789abcdef0 --profile my-profile
+./scripts/connect.sh --instance-id i-0123456789abcdef0 --profile my-profile
 ```
 
 **Connect** (Windows):
 ```powershell
-skills/ssm-ssh-access/scripts/connect.ps1 -InstanceId i-0123456789abcdef0 -Profile my-profile
+./scripts/connect.ps1 -InstanceId i-0123456789abcdef0 -Profile my-profile
 ```
 
 You'll be prompted to pick a remote user from a real list discovered on the instance
@@ -58,15 +65,15 @@ scp ./file.txt i-0123456789abcdef0:/tmp/
 
 **Check what's currently deployed:**
 ```bash
-skills/ssm-ssh-access/scripts/status.sh        # macOS/Linux
-skills/ssm-ssh-access/scripts/status.ps1       # Windows
+./scripts/status.sh        # macOS/Linux
+./scripts/status.ps1       # Windows
 ```
 
 **Revoke** (removes the key from the instance, deletes local key material, and removes
 the SSH config block):
 ```bash
-skills/ssm-ssh-access/scripts/revoke.sh --instance-id i-0123456789abcdef0 --profile my-profile
-skills/ssm-ssh-access/scripts/revoke.ps1 -InstanceId i-0123456789abcdef0 -Profile my-profile
+./scripts/revoke.sh --instance-id i-0123456789abcdef0 --profile my-profile
+./scripts/revoke.ps1 -InstanceId i-0123456789abcdef0 -Profile my-profile
 ```
 
 ## Agent behavior: end-of-session cleanup reminder
