@@ -18,6 +18,8 @@ Whether you're an AI practitioner, developer, or curious builder, this repositor
 applied-ai-innovation/
 ├── scripts/           # Utility scripts for AI workflows and repo tooling
 │   └── chunk_repo.sh  # Chunk a code repository into LLM-ready markdown files
+├── skills/
+│   └── ssm-ssh-access/  # SSH/SCP into private EC2 instances over AWS SSM
 └── README.md
 ```
 
@@ -30,6 +32,12 @@ applied-ai-innovation/
 | File | Description |
 |------|-------------|
 | [`scripts/chunk_repo.sh`](./scripts/chunk_repo.sh) | Splits a local code repository into word-limited markdown chunks, ready for feeding into LLMs or AI pipelines. Handles binary assets, syntax highlighting hints, and safe fenced code blocks. |
+
+### Skills
+
+| Skill | Description |
+|-------|--------------|
+| [`skills/ssm-ssh-access`](./skills/ssm-ssh-access/SKILL.md) | SSH/SCP into any private AWS EC2 instance by instance ID over AWS Systems Manager (SSM) Session Manager — no bastion, no open port 22, no VPN. Includes cross-platform install/connect/revoke scripts for macOS, Linux, and Windows. |
 
 ---
 
