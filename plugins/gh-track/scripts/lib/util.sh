@@ -8,6 +8,18 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
+# require_number VALUE WHAT — usage error unless VALUE is a plain integer.
+#
+# Callers are models, so a malformed argument is routine rather than
+# hypothetical, and these values are interpolated into grep/sed patterns and
+# jq --argjson. `--task '.*'` used to tick every item on the checklist and
+# replace every item number with the literal `.*`.
+require_number() {
+  case ${1:-} in
+    ''|*[!0-9]*) die "$2 must be a number, got: [${1:-}]" 2 ;;
+  esac
+}
+
 # json_get FILE JQ_FILTER DEFAULT — read a value, falling back when the file
 # is absent or the filter yields null/empty.
 json_get() {

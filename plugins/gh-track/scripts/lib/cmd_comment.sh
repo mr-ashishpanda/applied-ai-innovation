@@ -8,8 +8,9 @@
 
 cmd_comment() {
   cfg_load
+  slug_require
   local issue=${1:-}
-  [ -n "$issue" ] || die "comment requires an issue number" 2
+  require_number "$issue" "comment issue number"
   shift
   local event="" file="" sha=""
   while [ $# -gt 0 ]; do

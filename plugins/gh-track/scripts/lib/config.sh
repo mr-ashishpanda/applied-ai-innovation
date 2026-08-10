@@ -13,6 +13,11 @@ cfg_load() {
 
 # cfg KEY [DEFAULT] — dotted jq key. Built-in defaults apply when the key is
 # absent and no explicit default is given.
+#
+# Known limitation: for the six keys below, `cfg KEY ''` cannot request an
+# empty default — an explicitly empty DEFAULT is indistinguishable from an
+# omitted one, so the built-in wins. No caller wants that, and the
+# alternative ($# inspection) buys nothing today; revisit if one appears.
 cfg() {
   local key=$1 default=${2:-}
   if [ -z "$default" ]; then
@@ -38,17 +43,57 @@ state_set() {
   jq "$1" "$GHT_STATE" >"$tmp" && mv "$tmp" "$GHT_STATE"
 }
 
+# repo_slug — print owner/name, or warn and return 1.
+#
+# This function must NEVER die: every call site is a `$(...)` substitution,
+# where `exit` kills only the substitution subshell. The enclosing command
+# then runs with an empty --repo and the subcommand reports success — a
+# false success (the defect this replaced). Failure is signalled by exit
+# status so `slug_require` can turn it into a real abort at top level.
 repo_slug() {
   local slug
   slug=$(cfg .repo)
-  if [ -n "$slug" ]; then printf '%s' "$slug"; return 0; fi
-  slug=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)
-  [ -n "$slug" ] || die "cannot determine repo; set .repo in $GHT_CONFIG"
+  if [ -z "$slug" ]; then
+    slug=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)
+  fi
+  if [ -z "$slug" ]; then
+    warn "cannot determine repo; set .repo in $GHT_CONFIG"
+    return 1
+  fi
   printf '%s' "$slug"
 }
 
-repo_owner() { repo_slug | cut -d/ -f1; }
-repo_name() { repo_slug | cut -d/ -f2; }
+# slug_require — resolve the slug ONCE into GHT_SLUG, or abort.
+#
+# Called from a subcommand's top level, where a plain assignment's exit
+# status is visible to `||` and to `set -e`; every library function then
+# reads "$GHT_SLUG" instead of re-invoking `$(repo_slug)`. That both fixes
+# the swallowed-die false success and removes the duplicate `gh repo view`
+# calls a single subcommand used to make. An unset GHT_SLUG under `set -u`
+# is a loud programming error, which is the intent.
+slug_require() {
+  GHT_SLUG=$(repo_slug) || die "cannot determine repo; refusing to act on an unknown repository" 6
+}
+
+repo_owner() { printf '%s' "${GHT_SLUG%%/*}"; }
+repo_name() { printf '%s' "${GHT_SLUG##*/}"; }
+
+# gh_host — hostname for building web URLs. Read from origin's URL so
+# GitHub Enterprise Server installs get their own host rather than a
+# hardcoded github.com; github.com is the fallback when origin is absent or
+# unparseable. Derived from git config, so it costs no network round trip.
+gh_host() {
+  local url host
+  url=$(git remote get-url origin 2>/dev/null || true)
+  case $url in
+    git@*:*) host=${url#git@}; host=${host%%:*} ;;
+    ssh://*|https://*|http://*|git://*)
+      host=${url#*://}; host=${host#*@}; host=${host%%/*}; host=${host%%:*} ;;
+    *) host="" ;;
+  esac
+  [ -n "$host" ] || host="github.com"
+  printf '%s' "$host"
+}
 
 # cfg_write JQ_ASSIGNMENT — update config.json atomically, creating it first.
 cfg_write() {

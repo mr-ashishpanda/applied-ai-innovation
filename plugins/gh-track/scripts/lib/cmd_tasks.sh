@@ -10,8 +10,9 @@
 
 cmd_tasks() {
   cfg_load
+  slug_require
   local issue=${1:-}
-  [ -n "$issue" ] || die "tasks requires an issue number" 2
+  require_number "$issue" "tasks issue number"
   shift
   local plan=""
   while [ $# -gt 0 ]; do

@@ -14,10 +14,22 @@ board_has_scope() {
 }
 
 # board_ids — resolve and cache project/field/option ids into state.json.
+#
+# The short circuit requires EVERY id this function is responsible for, not
+# just the project id. projectId is persisted before `field-list` runs, so
+# gating on it alone meant one transient field-list failure cached a
+# half-built entry that no later run ever retried: the board stayed degraded
+# forever, and the warning blamed the project's field configuration rather
+# than a cache file the user does not know exists.
 board_ids() {
-  local cached
-  cached=$(state_get '.board.projectId')
-  if [ -n "$cached" ]; then return 0; fi
+  local cached_pid cached_fid cached_opts
+  cached_pid=$(state_get '.board.projectId')
+  cached_fid=$(state_get '.board.statusFieldId')
+  cached_opts=$(state_get '.board.statusOptions')
+  if [ -n "$cached_pid" ] && [ -n "$cached_fid" ] \
+     && [ -n "$cached_opts" ] && [ "$cached_opts" != "{}" ]; then
+    return 0
+  fi
 
   board_has_scope || {
     warn "missing 'project' scope; board writes skipped (fix: gh auth refresh -s project)"
@@ -99,7 +111,7 @@ board_item_id() {
   fi
 
   local url
-  url="https://github.com/$(repo_slug)/issues/$issue"
+  url="https://$(gh_host)/$GHT_SLUG/issues/$issue"
   id=$(gh project item-add "$proj" --owner "$owner" --url "$url" \
     --format json --jq .id 2>/dev/null || true)
   [ -n "$id" ] || { warn "cannot add issue #$issue to project $proj"; return 1; }

@@ -60,8 +60,13 @@ tasks_render() {
 }
 
 # tasks_tick LINES_FILE K — mark item K complete.
+#
+# K is interpolated into a grep pattern and a sed replacement, so it is
+# validated here as well as at the subcommand boundary: this is the library
+# entry point, and an unvalidated K rewrites every item on the checklist.
 tasks_tick() {
   local lines=$1 k=$2
+  require_number "$k" "tick --task"
   grep -q "^- \[[ x]\] $k\. " "$lines" || die "no checklist item numbered $k" 5
   sed "s/^- \[ \] $k\. /- [x] $k. /" "$lines"
 }

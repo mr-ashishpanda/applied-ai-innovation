@@ -9,8 +9,9 @@
 
 cmd_link() {
   cfg_load
+  slug_require
   local issue=${1:-}
-  [ -n "$issue" ] || die "link requires an issue number" 2
+  require_number "$issue" "link issue number"
   shift
   local kind="" path=""
   while [ $# -gt 0 ]; do
@@ -25,14 +26,29 @@ cmd_link() {
     *) die "link --kind must be spec or plan" 2 ;;
   esac
   [ -n "$path" ] || die "link requires --path PATH" 2
-  [ -f "$GHT_ROOT/$path" ] || [ -f "$path" ] || die "no such file: $path" 2
+
+  # Normalise before building anything: these URLs become the permanent
+  # record in an issue comment, so a path that merely resolves from the
+  # caller's cwd must not be turned into a confident 404.
+  path=$(link_root_relative "$path") \
+    || die "link --path must name a file inside the repository" 2
 
   local pushed=yes
   link_push || pushed=no
 
-  local head_url pin_url
-  head_url=$(link_urls "$path" | sed -n 1p)
-  pin_url=$(link_urls "$path" | sed -n 2p)
+  # One call, two lines -- link_urls runs git and reads config, so calling
+  # it twice doubled the subprocess work for identical output.
+  local urls head_url pin_url
+  urls=$(link_urls "$path")
+  head_url=$(printf '%s\n' "$urls" | sed -n 1p)
+  pin_url=$(printf '%s\n' "$urls" | sed -n 2p)
+
+  # Without a successful push these URLs resolve to nothing on GitHub.
+  # Degradation is a plain path, not a confident-looking dead link.
+  if [ "$pushed" = no ]; then
+    head_url=""
+    pin_url=""
+  fi
 
   printf 'kind=%s\n' "$kind"
   printf 'path=%s\n' "$path"

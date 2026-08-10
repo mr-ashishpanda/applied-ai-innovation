@@ -36,14 +36,52 @@ idempotent, and testable without a model.
 
 - **Labels are canonical; the board mirrors them.** A missing `project` scope
   or a Projects API failure costs the kanban view, not the truth.
+  `scripts/lib/board.sh` contains no `die`: every function there warns and
+  returns non-zero, so a board problem can never abort a label write.
 - **Tracking failures never abort development.** Every failure is a non-zero
   exit with a one-line reason; callers degrade rather than stop.
+- **Degrading means "report unknown", never "assume the empty answer".** A
+  `gh` read whose result shapes a write must distinguish failure from
+  emptiness, and a failed read refuses the write rather than issuing a
+  partial one. An empty label list, an empty comment list and a failed
+  lookup are three different things.
 - **Branch names carry the issue number** (`<issue>-<slug>`), so any session
   resolves its context from `git branch --show-current`.
 - **Every mutating subcommand is idempotent.** Re-running `tasks`, `tick`,
   `stage`, or `comment` with the same inputs edits in place rather than
   creating a duplicate — proved in `tests/test_idempotency.sh`, not just
   claimed.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success (possibly degraded — check the `pushed=` / `board=` values) |
+| 1 | General failure |
+| 2 | Usage error: bad or missing argument, unknown stage/kind/event, non-numeric issue number, a `--path` outside the repository |
+| 3 | The issue for this workspace could not be resolved |
+| 4 | The plan file had no parseable task headings |
+| 5 | The requested checklist item does not exist |
+| 6 | A `gh` read that shapes a write failed, so the write was refused; nothing was changed |
+
+### Output conventions
+
+The read-only subcommands — `doctor`, `resolve`, `show`, `link` — emit
+`key=value` lines, one per line, values unquoted and possibly empty. That is
+the machine-readable surface; parse those.
+
+The mutating subcommands — `new`, `stage`, `body`, `comment`, `tasks`, `tick`
+— emit a one-line prose confirmation instead, except `new`, which prints the
+bare issue number so it can be captured directly. Do not parse the prose;
+read state back with `show`.
+
+### Known limitations
+
+- Blob URLs take their host from `origin`'s URL (falling back to
+  `github.com`), so GitHub Enterprise Server works, but a repository with no
+  `origin` remote on a GHES install would get `github.com` links.
+- `link_default_url` (rewriting body links to the default branch once work
+  merges) has no caller yet, so body links continue to point at the branch.
 
 ## Running the tests
 
@@ -53,7 +91,13 @@ bash tests/run
 
 Tests are fully offline: a recording `gh` stub goes first on `PATH` and each
 test runs inside a scratch git repository, so every test asserts the exact
-`gh` invocations produced. `shellcheck` runs as part of the suite.
+`gh` invocations produced. `shellcheck` runs as part of the suite, over the
+test files as well as the scripts.
+
+The stub records any unmatched call whose *output* the code under test reads,
+and the suite fails on it. Without that, a missing canned response is
+indistinguishable from a legitimately empty API result — so it would silently
+reroute a test onto its degraded path with every assertion still passing.
 
 ## Requirements
 

@@ -25,23 +25,33 @@ comment_is_singleton() {
 
 comment_marker() { printf '<!-- gh-track:%s:%s -->' "$1" "$2"; }
 
-# comment_find N EVENT SHA — numeric REST id of the comment to edit, if any.
+# comment_find N EVENT SHA — numeric REST id of the comment to edit.
+#
+# Empty output means "no marked comment exists"; a non-zero RETURN means
+# "the lookup failed, so nothing is known". Conflating the two sends a
+# failed GET down the create branch and posts a duplicate checkpoint —
+# a realistic outcome of a secondary rate limit with --paginate, or any 5xx.
 comment_find() {
-  local issue=$1 event=$2 sha=$3 prefix esc
+  local issue=$1 event=$2 sha=$3 prefix raw id
   if comment_is_singleton "$event"; then
     prefix="<!-- gh-track:$event:"
   else
     prefix="$(comment_marker "$event" "$sha")"
   fi
-  # $prefix is interpolated into a jq program string; escape backslashes and
-  # double quotes first so an unusual SHA/event cannot break out of the jq
-  # string literal (worst case otherwise: a jq syntax error, swallowed by
-  # 2>/dev/null, silently degrading to "no match found").
-  esc=$(printf '%s' "$prefix" | sed 's/\\/\\\\/g; s/"/\\"/g')
-  gh api "repos/$(repo_slug)/issues/$issue/comments" --paginate \
-    --jq "[.[] | select(.body | startswith(\"$esc\"))] | first | .id // empty" \
-    2>/dev/null || true
+
+  raw=$(gh api "repos/$GHT_SLUG/issues/$issue/comments" --paginate 2>/dev/null) \
+    || { warn "cannot read comments for issue #$issue"; return 1; }
+
+  # jq --arg keeps $prefix out of the program text entirely, so no escaping
+  # is needed and no SHA or event name can perturb the filter. -s slurps
+  # --paginate's one-array-per-page stream into a single array, so `first`
+  # means the oldest matching comment across all pages, not per page.
+  id=$(printf '%s' "$raw" | jq -s -r --arg p "$prefix" \
+    '((add // []) | [.[] | select(.body | startswith($p))] | first | .id) // empty') \
+    || { warn "cannot parse the comment list for issue #$issue"; return 1; }
+  printf '%s' "$id"
 }
+
 
 # comment_upsert N EVENT SHA FILE — prints "created" or "updated".
 comment_upsert() {
@@ -64,15 +74,18 @@ comment_upsert() {
   trap "rm -f '$tmp'" EXIT
   { comment_marker "$event" "$sha"; printf '\n'; cat "$file"; } >"$tmp"
 
+  # A failed lookup is not "no comment exists": posting on that assumption
+  # duplicates a checkpoint that the spec requires to be edited in place.
   local existing
-  existing=$(comment_find "$issue" "$event" "$sha")
+  existing=$(comment_find "$issue" "$event" "$sha") \
+    || die "cannot determine whether a $event comment already exists on #$issue; refusing to post (nothing written)" 6
 
   if [ -n "$existing" ]; then
-    gh api -X PATCH "repos/$(repo_slug)/issues/comments/$existing" \
+    gh api -X PATCH "repos/$GHT_SLUG/issues/comments/$existing" \
       -F "body=@$tmp" >/dev/null
     printf 'updated'
   else
-    gh issue comment "$issue" --repo "$(repo_slug)" --body-file "$tmp" >/dev/null
+    gh issue comment "$issue" --repo "$GHT_SLUG" --body-file "$tmp" >/dev/null
     printf 'created'
   fi
 }

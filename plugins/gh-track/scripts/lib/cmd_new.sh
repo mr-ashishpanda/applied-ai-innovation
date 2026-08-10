@@ -9,6 +9,7 @@
 
 cmd_new() {
   cfg_load
+  slug_require
   local kind="" title="" bodyfile="" size=""
   while [ $# -gt 0 ]; do
     case $1 in
@@ -35,11 +36,11 @@ cmd_new() {
   if [ -n "$bodyfile" ]; then
     [ -f "$bodyfile" ] || die "no such file: $bodyfile" 2
     # shellcheck disable=SC2086 # args is a deliberately word-split flag list
-    url=$(gh issue create --repo "$(repo_slug)" --title "$title" \
+    url=$(gh issue create --repo "$GHT_SLUG" --title "$title" \
       --body-file "$bodyfile" $args)
   else
     # shellcheck disable=SC2086 # args is a deliberately word-split flag list
-    url=$(gh issue create --repo "$(repo_slug)" --title "$title" \
+    url=$(gh issue create --repo "$GHT_SLUG" --title "$title" \
       --body "Captured by gh-track. No spec yet." $args)
   fi
 

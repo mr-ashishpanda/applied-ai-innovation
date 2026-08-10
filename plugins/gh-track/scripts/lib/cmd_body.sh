@@ -8,8 +8,9 @@
 
 cmd_body() {
   cfg_load
+  slug_require
   local issue=${1:-}
-  [ -n "$issue" ] || die "body requires an issue number" 2
+  require_number "$issue" "body issue number"
   shift
   local file=""
   while [ $# -gt 0 ]; do

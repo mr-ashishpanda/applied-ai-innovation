@@ -10,8 +10,9 @@
 
 cmd_tick() {
   cfg_load
+  slug_require
   local issue=${1:-}
-  [ -n "$issue" ] || die "tick requires an issue number" 2
+  require_number "$issue" "tick issue number"
   shift
   local task=""
   while [ $# -gt 0 ]; do
@@ -21,6 +22,7 @@ cmd_tick() {
     esac
   done
   [ -n "$task" ] || die "tick requires --task K" 2
+  require_number "$task" "tick --task"
 
   local tmp
   tmp=$(mktemp -d)
