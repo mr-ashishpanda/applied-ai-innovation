@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/helpers.sh"
+# shellcheck source=../scripts/lib/util.sh
+. "$PLUGIN_DIR/scripts/lib/util.sh"
+# shellcheck source=../scripts/lib/config.sh
+. "$PLUGIN_DIR/scripts/lib/config.sh"
+# shellcheck source=../scripts/lib/body.sh
+. "$PLUGIN_DIR/scripts/lib/body.sh"
+# shellcheck source=../scripts/lib/tasks.sh
+. "$PLUGIN_DIR/scripts/lib/tasks.sh"
+
+setup_scratch
+# Write a real config before cfg_load: repo_slug would otherwise die inside
+# a $(...) substitution where set -e does not propagate, silently yielding
+# an empty string and producing inert stderr noise (see Task 4 convention).
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+cfg_load
+
+# Extraction finds every task heading and nothing else.
+tasks_extract "$TESTS_DIR/fixtures/plan-sample.md" >lines.md
+assert_eq "4" "$(wc -l <lines.md | tr -d ' ')" "four tasks extracted"
+assert_contains "$(cat lines.md)" "- [ ] 1. First thing" "task 1 line"
+assert_contains "$(cat lines.md)" "- [ ] 3. Third thing with \`code\` in the title" "code in title survives"
+assert_not_contains "$(cat lines.md)" "99." "inline decoy not matched"
+
+# Unparseable plan exits 4 and says which pattern failed.
+printf '# no tasks here\n' >empty-plan.md
+# tasks_extract dies via `exit`, which terminates a shell outright -- `||`
+# cannot intercept it in the same shell. Run it in its own subshell first
+# (matches the pattern in test_resolve.sh) so only that subshell exits;
+# the outer command substitution then evaluates `|| true` normally.
+out=$( (tasks_extract empty-plan.md) 2>&1 || true)
+assert_exit 4 tasks_extract empty-plan.md
+assert_contains "$out" "### Task" "error names the pattern"
+
+# Merge preserves ticks by task number, not by position.
+printf -- '- [x] 1. First thing\n- [x] 2. Second thing\n' >old.md
+tasks_merge old.md lines.md >merged.md
+assert_contains "$(cat merged.md)" "- [x] 1. First thing" "tick 1 preserved"
+assert_contains "$(cat merged.md)" "- [x] 2. Second thing" "tick 2 preserved"
+assert_contains "$(cat merged.md)" "- [ ] 4. Fourth thing" "new task unticked"
+
+# A retitled task keeps its tick and takes the new title.
+printf -- '- [x] 1. Old title\n' >old2.md
+tasks_merge old2.md lines.md >merged2.md
+assert_contains "$(cat merged2.md)" "- [x] 1. First thing" "retitled task keeps tick"
+
+# Render computes the counter from the lines.
+tasks_render merged.md >section.md
+assert_contains "$(head -1 section.md)" "## Tasks (from plan - 2/4)" "counter 2/4"
+
+# Ticking updates one item and nothing else.
+tasks_tick merged.md 4 >ticked.md
+assert_contains "$(cat ticked.md)" "- [x] 4. Fourth thing" "task 4 ticked"
+assert_contains "$(cat ticked.md)" "- [ ] 3. Third thing" "task 3 untouched"
+
+# Ticking an absent task exits 5 rather than silently doing nothing.
+assert_exit 5 tasks_tick merged.md 77
+
+# Ticking twice is idempotent.
+tasks_tick ticked.md 4 >ticked2.md
+assert_eq "$(cat ticked.md)" "$(cat ticked2.md)" "tick is idempotent"
+
+# End to end: tasks subcommand reads the body, writes back one edit.
+stub_reset
+stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
+"$GHTRACK" tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
+assert_eq "1" "$(stub_call_count 'issue edit 42')" "exactly one body edit"
+
+teardown_scratch
+report
