@@ -20,6 +20,8 @@ applied-ai-innovation/
 │   └── chunk_repo.sh  # Chunk a code repository into LLM-ready markdown files
 ├── skills/
 │   └── ssm-ssh-access/  # SSH/SCP into private EC2 instances over AWS SSM
+├── plugins/
+│   └── gh-track/      # GitHub issue + project tracking for superpowers workflows
 └── README.md
 ```
 
@@ -38,6 +40,12 @@ applied-ai-innovation/
 | Skill | Description |
 |-------|--------------|
 | [`skills/ssm-ssh-access`](./skills/ssm-ssh-access/SKILL.md) | SSH/SCP into any private AWS EC2 instance by instance ID over AWS Systems Manager (SSM) Session Manager — no bastion, no open port 22, no VPN. Includes cross-platform install/connect/revoke scripts for macOS, Linux, and Windows. |
+
+### Plugins
+
+| Plugin | Description |
+|--------|-------------|
+| [`plugins/gh-track`](./plugins/gh-track/README.md) | GitHub issue and project tracking for superpowers development workflows. Every work item becomes one issue carrying its stage, artifact links, task checklist, and a timeline of decisions — without duplicating spec or plan prose into GitHub. |
 
 ---
 

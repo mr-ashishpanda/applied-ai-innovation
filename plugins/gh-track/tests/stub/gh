@@ -4,6 +4,8 @@
 # Contract:
 #   $GH_STUB_LOG        - file; one line per call, the joined arguments
 #   $GH_STUB_RESPONSES  - file; TAB-separated: PATTERN <TAB> EXIT <TAB> [STDOUT_FILE]
+#   $GH_STUB_LOG.body   - snapshot of the last --body-file argument's
+#                         content, taken right now, at call time
 #
 # The first response whose PATTERN occurs as a substring of the joined
 # arguments wins. With no match: exit 0, empty stdout. This keeps tests
@@ -12,6 +14,21 @@ set -uo pipefail
 
 args="$*"
 printf '%s\n' "$args" >>"${GH_STUB_LOG:?GH_STUB_LOG unset}"
+
+# Callers that invoke the real `ghtrack` binary (rather than sourcing its
+# library functions) write --body-file to a mktemp scratch dir that a caller
+# EXIT trap deletes the moment that process exits -- which happens before
+# control ever returns to the test. Snapshotting the content here, while the
+# file still exists mid-call, is the only point it can be captured.
+body_file=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--body-file" ]; then body_file=$a; fi
+  prev=$a
+done
+if [ -n "$body_file" ] && [ -f "$body_file" ]; then
+  cp "$body_file" "${GH_STUB_LOG}.body" 2>/dev/null || true
+fi
 
 # Real gh applies --jq to its JSON output. The stub must too, or every
 # test whose code path uses --jq would assert against raw JSON.
