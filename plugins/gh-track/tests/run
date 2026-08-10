@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Run every tests/test_*.sh as its own process; report aggregate result.
+# Also runs shellcheck over all scripts, since lint failures are test
+# failures under this plan's Global Constraints.
+set -uo pipefail
+
+# shellcheck disable=SC2164 # dirname/pwd of this running script cannot fail.
+cd "$(cd "$(dirname "$0")" && pwd)"
+
+failed=0
+total=0
+
+for t in test_*.sh; do
+  [ -f "$t" ] || continue
+  total=$((total + 1))
+  printf '%s\n' "$t"
+  if ! bash "$t"; then
+    failed=$((failed + 1))
+  fi
+done
+
+if command -v shellcheck >/dev/null 2>&1; then
+  printf 'shellcheck\n'
+  if ! shellcheck -x ../scripts/ghtrack ../scripts/lib/*.sh stub/gh helpers.sh run; then
+    failed=$((failed + 1))
+  fi
+else
+  printf 'shellcheck: not installed, skipped\n'
+fi
+
+if [ "$failed" -gt 0 ]; then
+  printf '\n%d of %d suites FAILED\n' "$failed" "$total" >&2
+  exit 1
+fi
+printf '\nall %d suites passed\n' "$total"

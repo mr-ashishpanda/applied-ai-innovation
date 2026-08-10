@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# ghtrack — GitHub issue and project tracking plumbing for gh-track.
+# All GitHub mutations the plugin performs live here, so they are
+# deterministic, idempotent, and testable without a model.
+set -euo pipefail
+
+GHTRACK_VERSION="0.1.0"
+
+GHT_SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+GHT_LIB="$GHT_SCRIPTS/lib"
+export GHT_LIB
+
+# shellcheck source=SCRIPTDIR/lib/util.sh
+. "$GHT_LIB/util.sh"
+
+usage() {
+  cat <<'EOF'
+usage: ghtrack <subcommand> [options]
+
+  doctor                              check environment, auth, scopes, config
+  init                                create labels, board, and config
+  new --kind K --title T [...]        create an issue at stage:backlog
+  resolve                             print the issue number for this branch
+  show N                              print issue state as key=value lines
+  stage N STAGE                       swap stage label, mirror board Status
+  body N --file F                     replace the issue body
+  comment N --event E --file F        post or edit a marked comment
+  link N --kind spec|plan --path P     push branch, print artifact URLs
+  tasks N --plan P                    sync body checklist from a plan
+  tick N --task K                     mark checklist item K complete
+
+  --version                           print version
+EOF
+}
+
+main() {
+  if [ $# -eq 0 ]; then usage >&2; exit 2; fi
+
+  case $1 in
+    --version) printf '%s\n' "$GHTRACK_VERSION"; return 0 ;;
+    -h|--help|help) usage; return 0 ;;
+  esac
+
+  local sub=$1
+  shift
+
+  case $sub in
+    doctor|init|new|resolve|show|stage|body|comment|link|tasks|tick)
+      # shellcheck source=/dev/null
+      . "$GHT_LIB/cmd_$sub.sh"
+      "cmd_$sub" "$@"
+      ;;
+    *)
+      printf 'ghtrack: unknown subcommand: %s\n' "$sub" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

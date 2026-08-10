@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Recording gh stub. Logs every invocation and replays canned responses.
+#
+# Contract:
+#   $GH_STUB_LOG        - file; one line per call, the joined arguments
+#   $GH_STUB_RESPONSES  - file; TAB-separated: PATTERN <TAB> EXIT <TAB> [STDOUT_FILE]
+#
+# The first response whose PATTERN occurs as a substring of the joined
+# arguments wins. With no match: exit 0, empty stdout. This keeps tests
+# declarative — a test states only the calls it cares about.
+set -uo pipefail
+
+args="$*"
+printf '%s\n' "$args" >>"${GH_STUB_LOG:?GH_STUB_LOG unset}"
+
+# Real gh applies --jq to its JSON output. The stub must too, or every
+# test whose code path uses --jq would assert against raw JSON.
+jq_filter=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--jq" ]; then jq_filter=$a; fi
+  prev=$a
+done
+
+emit() {
+  local f=$1
+  if [ -n "$jq_filter" ] && command -v jq >/dev/null 2>&1; then
+    jq -r "$jq_filter" <"$f" 2>/dev/null || true
+  else
+    cat "$f"
+  fi
+}
+
+if [ -n "${GH_STUB_RESPONSES:-}" ] && [ -f "$GH_STUB_RESPONSES" ]; then
+  while IFS="$(printf '\t')" read -r pattern code outfile; do
+    [ -n "${pattern:-}" ] || continue
+    case "$args" in
+      *"$pattern"*)
+        if [ -n "${outfile:-}" ] && [ -f "$outfile" ]; then
+          emit "$outfile"
+        fi
+        exit "${code:-0}"
+        ;;
+    esac
+  done <"$GH_STUB_RESPONSES"
+fi
+
+exit 0
