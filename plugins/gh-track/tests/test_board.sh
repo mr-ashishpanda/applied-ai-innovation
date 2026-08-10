@@ -66,6 +66,24 @@ stub_reset
 stub_expect 'project item-list' 1
 assert_exit 1 board_status_set 42 Doing
 
+# item-list hitting the cap with no match means absence is unproven: warn
+# and refuse to add a possibly-duplicate card.
+stub_reset
+capped_items=$(jq -n --argjson n "$BOARD_ITEM_LIMIT" \
+  '{items: [range($n) | {id: ("PVTI_" + (. | tostring)), content: {number: (1000 + .)}}]}')
+stub_expect_json 'project item-list' "$capped_items"
+assert_exit 1 board_status_set 42 Doing
+assert_eq "0" "$(stub_call_count 'item-add')" "capped list: no duplicate card created"
+
+# item-list below the cap with no match still proves absence: add proceeds.
+stub_reset
+under_cap_items=$(jq -n \
+  '{items: [range(3) | {id: ("PVTI_" + (. | tostring)), content: {number: (1000 + .)}}]}')
+stub_expect_json 'project item-list' "$under_cap_items"
+stub_expect_json 'project item-add' '{"id":"PVTI_below_cap"}'
+assert_exit 0 board_status_set 42 Doing
+assert_contains "$(stub_calls)" "item-add" "below cap: absent issue still added"
+
 # init creates labels, ensures the board, and writes config.
 setup_scratch
 stub_reset

@@ -5,6 +5,10 @@
 
 BOARD_STATUSES="Backlog Todo Doing Review Done"
 
+# Cap on items fetched per `gh project item-list` call. Named once so the
+# --limit argument and the truncation check below can never drift apart.
+BOARD_ITEM_LIMIT=500
+
 board_has_scope() {
   gh auth status 2>&1 | grep -q "'project'"
 }
@@ -40,40 +44,59 @@ board_ids() {
   sizename=$(cfg .board.sizeField)
 
   sfid=$(printf '%s' "$fields" | jq -r --arg n "$statusname" \
-    '.fields[] | select(.name == $n) | .id // empty')
+    '.fields[] | select(.name == $n) | .id // empty' 2>/dev/null)
   [ -n "$sfid" ] || { warn "project $proj has no '$statusname' field"; return 1; }
   state_set ".board.statusFieldId = \"$sfid\""
 
   zfid=$(printf '%s' "$fields" | jq -r --arg n "$sizename" \
-    '.fields[] | select(.name == $n) | .id // empty')
+    '.fields[] | select(.name == $n) | .id // empty' 2>/dev/null)
   [ -n "$zfid" ] && state_set ".board.sizeFieldId = \"$zfid\""
 
   local opts
   opts=$(printf '%s' "$fields" | jq -c --arg n "$statusname" \
-    '[.fields[] | select(.name == $n) | .options[]? | {name, id}]')
-  state_set ".board.statusOptions = ($(printf '%s' "$opts" | jq 'map({(.name): .id}) | add // {}'))"
+    '[.fields[] | select(.name == $n) | .options[]? | {name, id}]' 2>/dev/null)
+  state_set ".board.statusOptions = ($(printf '%s' "$opts" | jq 'map({(.name): .id}) | add // {}' 2>/dev/null))"
 
   local zopts
   zopts=$(printf '%s' "$fields" | jq -c --arg n "$sizename" \
-    '[.fields[] | select(.name == $n) | .options[]? | {name, id}]')
-  state_set ".board.sizeOptions = ($(printf '%s' "$zopts" | jq 'map({(.name): .id}) | add // {}'))"
+    '[.fields[] | select(.name == $n) | .options[]? | {name, id}]' 2>/dev/null)
+  state_set ".board.sizeOptions = ($(printf '%s' "$zopts" | jq 'map({(.name): .id}) | add // {}' 2>/dev/null))"
 
   return 0
 }
 
 # board_item_id N — project item id for issue N, adding it if absent.
+#
+# `gh project item-list` applies no state filter: it returns every item on
+# the board, Done and closed included, so a long-lived board fills the
+# --limit cap over time even if open-issue count stays modest. We do NOT
+# filter the query (e.g. `is:open`) to dodge that: board_status_set runs on
+# the *last* transition of an issue's life too (moving it to Done), so an
+# open-only filter would make the lookup miss precisely the issues most
+# likely to already be on the board, turning a rare truncation edge case
+# into a guaranteed duplicate on every completion. Instead: if the issue
+# isn't found AND the returned count is at the cap, the list may have been
+# truncated before reaching it, so absence is unproven — warn and refuse to
+# guess rather than risk creating a duplicate card.
 board_item_id() {
-  local issue=$1 proj owner items id
+  local issue=$1 proj owner items id count
   proj=$(cfg .project)
   owner=$(cfg .projectOwner)
   [ -n "$owner" ] || owner=$(repo_owner)
 
-  items=$(gh project item-list "$proj" --owner "$owner" --format json --limit 500 2>/dev/null) \
+  items=$(gh project item-list "$proj" --owner "$owner" --format json \
+    --limit "$BOARD_ITEM_LIMIT" 2>/dev/null) \
     || { warn "cannot list project items"; return 1; }
 
   id=$(printf '%s' "$items" | jq -r --argjson n "$issue" \
-    '.items[] | select(.content.number == $n) | .id // empty' | head -1)
+    '.items[] | select(.content.number == $n) | .id // empty' 2>/dev/null | head -1)
   if [ -n "$id" ]; then printf '%s' "$id"; return 0; fi
+
+  count=$(printf '%s' "$items" | jq -r '.items | length' 2>/dev/null || true)
+  if [ -n "$count" ] && [ "$count" -ge "$BOARD_ITEM_LIMIT" ]; then
+    warn "project item-list hit the $BOARD_ITEM_LIMIT-item cap; cannot confirm issue #$issue is absent from the board"
+    return 1
+  fi
 
   local url
   url="https://github.com/$(repo_slug)/issues/$issue"
