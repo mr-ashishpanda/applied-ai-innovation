@@ -68,5 +68,29 @@ stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1
 "$GHTRACK" tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
 assert_eq "1" "$(stub_call_count 'issue edit 42')" "exactly one body edit"
 
+# Cleanup: neither subcommand leaks its scratch tmpdir (each holds a full
+# copy of the issue body, so a leaked one is not just disk waste but an
+# information-hygiene problem). Snapshot mktemp -d's own droppings
+# (`tmp.XXXXXXXXXX` under $TMPDIR) before and after each invocation and
+# require the sets to be identical -- a trap that fires but no-ops (e.g. a
+# single-quoted body that expands $tmp to "" at fire time) would otherwise
+# pass every functional assertion above while still leaking a directory per
+# call.
+tmp_root="${TMPDIR:-/tmp}"
+before=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
+
+stub_reset
+stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
+"$GHTRACK" tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
+after=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
+assert_eq "$before" "$after" "tasks leaves no scratch tmpdir behind"
+
+before=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
+stub_reset
+stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
+"$GHTRACK" tick 42 --task 2 >/dev/null
+after=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
+assert_eq "$before" "$after" "tick leaves no scratch tmpdir behind"
+
 teardown_scratch
 report
