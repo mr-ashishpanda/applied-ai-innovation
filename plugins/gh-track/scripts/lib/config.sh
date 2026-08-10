@@ -49,3 +49,11 @@ repo_slug() {
 
 repo_owner() { repo_slug | cut -d/ -f1; }
 repo_name() { repo_slug | cut -d/ -f2; }
+
+# cfg_write JQ_ASSIGNMENT — update config.json atomically, creating it first.
+cfg_write() {
+  mkdir -p "$(dirname "$GHT_CONFIG")"
+  [ -f "$GHT_CONFIG" ] || printf '%s' '{}' >"$GHT_CONFIG"
+  local tmp="$GHT_CONFIG.tmp.$$"
+  jq "$1" "$GHT_CONFIG" >"$tmp" && mv "$tmp" "$GHT_CONFIG"
+}
