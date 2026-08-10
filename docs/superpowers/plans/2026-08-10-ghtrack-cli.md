@@ -19,6 +19,7 @@
 - **No network in tests.** Any test that would reach the network is a broken test.
 - **Config path:** `.claude/gh-track/config.json` (committed). **State path:** `.claude/gh-track/state.json` (git-ignored).
 - **Marker format, exact:** `<!-- gh-track:<event>:<sha> -->` as the first line of a comment body.
+- **Test *mechanics* may be corrected; test *intent* may not.** If a test fails because of harness plumbing — a stub that does not emulate a `gh` flag the code uses, a missing canned response, an assertion helper that mishandles a dying function — fix the mechanics and say so in your report. Never weaken, delete, or narrow an assertion to make it pass; if the assertion's intent looks wrong, report it instead of changing it.
 - **Stage labels, exact:** `stage:backlog`, `stage:spec`, `stage:triage`, `stage:planned`, `stage:debugging`, `stage:building`, `stage:review`, `stage:done`.
 - **Board Status options, exact:** `Backlog`, `Todo`, `Doing`, `Review`, `Done`.
 - **Tasks heading in issue bodies, exact ASCII:** `## Tasks (from plan - N/M)`. ASCII hyphen, not an em dash, so `awk` and `sed` behave identically across platforms.
@@ -130,13 +131,31 @@ set -uo pipefail
 args="$*"
 printf '%s\n' "$args" >>"${GH_STUB_LOG:?GH_STUB_LOG unset}"
 
+# Real gh applies --jq to its JSON output. The stub must too, or every
+# test whose code path uses --jq would assert against raw JSON.
+jq_filter=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--jq" ]; then jq_filter=$a; fi
+  prev=$a
+done
+
+emit() {
+  local f=$1
+  if [ -n "$jq_filter" ] && command -v jq >/dev/null 2>&1; then
+    jq -r "$jq_filter" <"$f" 2>/dev/null || true
+  else
+    cat "$f"
+  fi
+}
+
 if [ -n "${GH_STUB_RESPONSES:-}" ] && [ -f "$GH_STUB_RESPONSES" ]; then
   while IFS="$(printf '\t')" read -r pattern code outfile; do
     [ -n "${pattern:-}" ] || continue
     case "$args" in
       *"$pattern"*)
         if [ -n "${outfile:-}" ] && [ -f "$outfile" ]; then
-          cat "$outfile"
+          emit "$outfile"
         fi
         exit "${code:-0}"
         ;;
@@ -146,6 +165,13 @@ fi
 
 exit 0
 ```
+
+**Why the `--jq` emulation matters:** `repo_slug` runs
+`gh repo view --json nameWithOwner --jq .nameWithOwner` and expects
+`owner/name`. A stub that merely `cat`s its canned JSON would return
+`{"nameWithOwner":"owner/name"}` and every such assertion would fail for a
+reason that has nothing to do with the code under test. The stub emulates
+`--jq` so canned responses stay readable as real API shapes.
 
 Make it executable: `chmod +x plugins/gh-track/tests/stub/gh`
 
@@ -197,12 +223,17 @@ assert_not_contains() {
 }
 
 # assert_exit CODE CMD... — runs CMD, compares exit status.
+#
+# CMD runs in a SUBSHELL. Most library functions here signal failure with
+# `die`, which calls `exit` — and `exit` inside a function terminates the
+# whole shell, `||` notwithstanding. Without the subshell, the first
+# assert_exit on a dying function would kill the test run silently.
 assert_exit() {
   local want=$1
   shift
   CHECKS=$((CHECKS + 1))
   local got=0
-  "$@" >/dev/null 2>&1 || got=$?
+  ( "$@" ) >/dev/null 2>&1 || got=$?
   if [ "$want" != "$got" ]; then
     fail "assert_exit: expected exit $want, got $got from: $*"
   fi
@@ -488,9 +519,12 @@ assert_eq "zz" "$(state_get '.nope' zz)" "state default"
 # doctor reports missing config as a warning, not a failure, and exits 0
 # when gh is present and authed.
 stub_reset
-stub_expect_json 'auth status' '{}'
+stub_expect_json 'auth status' "Token scopes: 'repo'"
+stub_expect_json 'repo view' '{"nameWithOwner":"fallback/repo"}'
 out=$("$GHTRACK" doctor 2>&1 || true)
 assert_contains "$out" "repo:" "doctor reports repo line"
+assert_contains "$out" "config: MISSING" "doctor flags absent config"
+assert_contains "$out" "scope project: MISSING" "doctor flags absent project scope"
 
 teardown_scratch
 report
@@ -1558,11 +1592,14 @@ if [ "$1" = "push" ]; then echo "push rejected" >&2; exit 1; fi
 exec /usr/bin/git "$@"
 EOS
 chmod +x "$SCRATCH/fakegit"
-(
-  PATH="$SCRATCH:$PATH"
-  ln -sf "$SCRATCH/fakegit" "$SCRATCH/git"
-  assert_exit 1 link_push
-)
+# Not in a subshell: FAILURES incremented inside one would be lost and a
+# real failure would read as a pass.
+ln -sf "$SCRATCH/fakegit" "$SCRATCH/git"
+old_path=$PATH
+PATH="$SCRATCH:$PATH"
+assert_exit 1 link_push
+PATH=$old_path
+rm -f "$SCRATCH/git"
 
 # The subcommand degrades to a plain path when there is no remote.
 out=$("$GHTRACK" link 42 --kind spec --path docs/superpowers/specs/s.md 2>&1 || true)
