@@ -13,6 +13,7 @@ set -euo pipefail
 setup_scratch
 printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
 cfg_load
+scratch_slug
 
 # Stage to Status mapping, every stage covered.
 assert_eq "Backlog" "$(stage_to_status backlog)" "backlog -> Backlog"
@@ -22,7 +23,7 @@ assert_eq "Todo" "$(stage_to_status planned)" "planned -> Todo"
 assert_eq "Doing" "$(stage_to_status building)" "building -> Doing"
 assert_eq "Doing" "$(stage_to_status debugging)" "debugging -> Doing"
 assert_eq "Review" "$(stage_to_status review)" "review -> Review"
-assert_eq "Done" "$(stage_to_status done)" "done -> Done"
+assert_eq "Done" "$(stage_to_status "done")" "done -> Done"
 assert_exit 1 stage_valid nonsense
 
 # labels_ensure uses --force so re-running cannot fail on existing labels.
@@ -56,6 +57,24 @@ stub_reset
 stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:planned"}]}'
 assert_exit 0 stage_set 42 planned
 
+# C1 regression. The read that shapes the --remove-label list must be able
+# to say "I failed" -- an empty answer turns the label SWAP into an ADD and
+# leaves the issue carrying TWO stage:* labels, while `stage` prints success
+# and exits 0. That corrupts the canonical store the whole design rests on.
+stub_reset
+stub_expect 'issue view 42' 1
+assert_exit 1 issue_labels 42 "failed label read returns non-zero"
+assert_exit 6 stage_set 42 review
+assert_eq "0" "$(stub_call_count 'issue edit')" "no partial edit on a failed read"
+
+# An issue with genuinely no labels is still a successful read, and the add
+# must proceed (no --remove-label flags to compute).
+stub_reset
+stub_expect_json 'issue view 42' '{"labels":[]}'
+assert_exit 0 stage_set 42 review
+assert_contains "$(stub_calls)" "--add-label stage:review" "unlabelled issue still gets its stage"
+assert_not_contains "$(stub_calls)" "--remove-label" "nothing to remove from an unlabelled issue"
+
 # issue_stage reads the current stage.
 stub_reset
 stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:building"},{"name":"size:m"}]}'
@@ -84,6 +103,18 @@ assert_contains "$out" "stage=building" "show reports stage"
 assert_contains "$out" "kind=feature" "show reports kind"
 assert_contains "$out" "size=m" "show reports size"
 assert_contains "$out" "tasks=2/4" "show reports checklist progress"
+
+# I5 regression: a body saved by GitHub's web form has CRLF line endings.
+# Every line-anchored pattern in show must still match, and the artifact
+# links must not be captured greedily to the last `)` on the line.
+crlf_body='## Artifacts\r\n- Spec: [docs/s.md](https://github.com/me/proj/blob/x/docs/s.md) (pinned)\r\n- Plan: [docs/p.md](https://github.com/me/proj/blob/x/docs/p.md)\r\n\r\n## Tasks (from plan - 1/2)\r\n- [x] 1. a\r\n- [ ] 2. b\r\n'
+stub_reset
+stub_expect_json 'issue view 42' \
+  "{\"number\":42,\"title\":\"T\",\"state\":\"OPEN\",\"labels\":[{\"name\":\"stage:spec\"}],\"body\":\"$crlf_body\"}"
+out=$("$GHTRACK" show 42)
+assert_contains "$out" "spec=https://github.com/me/proj/blob/x/docs/s.md" "CRLF body still yields the spec link"
+assert_contains "$out" "plan=https://github.com/me/proj/blob/x/docs/p.md" "CRLF body still yields the plan link"
+assert_contains "$out" "tasks=1/2" "CRLF body still yields the checklist counter"
 
 # Cleanup: show does not leak its scratch tmpdir. show's trap must expand
 # $tmp at registration time (double-quoted), not at fire time (single-

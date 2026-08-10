@@ -21,7 +21,12 @@ done
 
 if command -v shellcheck >/dev/null 2>&1; then
   printf 'shellcheck\n'
-  if ! shellcheck -x ../scripts/ghtrack ../scripts/lib/*.sh stub/gh helpers.sh run; then
+  # test_*.sh is in the target list deliberately: leaving it out meant half
+  # the repository's shell files were never linted, and the tests are where a
+  # silent quoting bug does the most damage (an unquoted `done` read as the
+  # loop keyword turned an assertion into a no-op).
+  if ! shellcheck -x ../scripts/ghtrack ../scripts/lib/*.sh test_*.sh \
+       stub/gh helpers.sh run; then
     failed=$((failed + 1))
   fi
 else

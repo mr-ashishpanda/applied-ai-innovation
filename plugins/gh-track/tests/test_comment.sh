@@ -11,12 +11,13 @@ set -euo pipefail
 setup_scratch
 printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
 cfg_load
+scratch_slug
 
 assert_eq "<!-- gh-track:spec:abc1234 -->" "$(comment_marker spec abc1234)" "marker format"
 
 # Event classification.
 assert_exit 0 comment_is_singleton spec
-assert_exit 0 comment_is_singleton done
+assert_exit 0 comment_is_singleton "done"
 assert_exit 1 comment_is_singleton scope-change
 assert_exit 1 comment_is_singleton blocked
 
@@ -55,13 +56,47 @@ assert_eq "updated" "$out" "same sha is idempotent"
 # The marker is prepended to the body sent to GitHub.
 stub_reset
 stub_expect_json 'issues/42/comments' '[]'
-comment_upsert 42 done deadbee c.md >/dev/null
+comment_upsert 42 "done" deadbee c.md >/dev/null
 sent=$(grep -o '\-\-body-file [^ ]*' "$GH_STUB_LOG" | head -1 | awk '{print $2}')
 assert_contains "$(head -1 "$sent")" "<!-- gh-track:done:deadbee -->" "marker is first line"
 assert_contains "$(cat "$sent")" "Spec agreed" "author text preserved"
 
 # Unknown event is rejected rather than silently accepted.
 assert_exit 2 comment_upsert 42 nonsense abc c.md
+
+# C2 regression. A FAILED lookup is not "no comment exists": treating it as
+# such posts a duplicate checkpoint on an issue that already has one and
+# reports "created". Empty output still means not-found; failure is a
+# non-zero return, and it must stop the post.
+stub_reset
+stub_expect 'issues/42/comments' 1
+assert_exit 1 comment_find 42 spec abc1234 "failed lookup returns non-zero"
+assert_exit 6 comment_upsert 42 spec abc1234 c.md
+assert_eq "0" "$(stub_call_count 'issue comment 42')" "no comment posted on a failed lookup"
+assert_eq "0" "$(stub_call_count '-X PATCH')" "no comment edited on a failed lookup"
+
+# An empty comment list is still a legitimate "not found" and must post.
+stub_reset
+stub_expect_json 'issues/42/comments' '[]'
+out=$(comment_upsert 42 spec abc1234 c.md)
+assert_eq "created" "$out" "an empty list still means not found"
+
+# A marker containing jq/regex metacharacters cannot perturb the filter now
+# that it travels via jq --arg rather than the program text.
+stub_reset
+stub_expect_json 'issues/42/comments' \
+  '[{"id":901,"body":"<!-- gh-track:scope-change:a\"b\\c -->\nx"}]'
+out=$(comment_upsert 42 scope-change 'a"b\c' c.md)
+assert_eq "updated" "$out" "quotes and backslashes in a sha still match"
+
+# --paginate yields one array per page; a match on a later page must be found.
+stub_reset
+stub_expect_json 'issues/42/comments' \
+  '[{"id":1,"body":"unrelated"}]
+[{"id":222,"body":"<!-- gh-track:plan:zzz -->\nplan text"}]'
+out=$(comment_upsert 42 plan zzz c.md)
+assert_eq "updated" "$out" "match found on a later page"
+assert_contains "$(stub_calls)" "issues/comments/222" "edited the match from page 2"
 
 teardown_scratch
 report

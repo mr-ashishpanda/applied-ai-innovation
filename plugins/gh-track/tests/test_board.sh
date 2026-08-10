@@ -11,6 +11,7 @@ set -euo pipefail
 setup_scratch
 printf '%s' '{"repo":"me/proj","project":3}' >.claude/gh-track/config.json
 cfg_load
+scratch_slug
 
 # Missing project scope is detected and reported, not fatal.
 stub_reset
@@ -36,6 +37,28 @@ assert_eq "O_doing" "$(state_get '.board.statusOptions.Doing')" "status option c
 stub_reset
 assert_exit 0 board_ids
 assert_eq "0" "$(stub_call_count 'project field-list')" "ids read from cache"
+
+# I1 regression. projectId is persisted BEFORE field-list runs, so gating the
+# cache short-circuit on projectId alone meant one transient field-list
+# failure cached a half-built entry that no later run ever retried: the board
+# stayed degraded forever and the warning blamed the project's field
+# configuration rather than a cache file the user cannot see.
+rm -f .claude/gh-track/state.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'project'"
+stub_expect 'project field-list' 1
+stub_expect_json 'project view' '{"id":"PVT_x"}'
+assert_exit 1 board_ids
+assert_eq "PVT_x" "$(state_get '.board.projectId')" "partial cache is written"
+assert_eq "" "$(state_get '.board.statusFieldId')" "no status field cached after the failure"
+
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'project'"
+stub_expect_json 'project field-list' '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"},{"id":"O_doing","name":"Doing"},{"id":"O_done","name":"Done"},{"id":"O_backlog","name":"Backlog"},{"id":"O_review","name":"Review"}]},{"id":"F_size","name":"Size","options":[{"id":"O_s","name":"S"},{"id":"O_m","name":"M"},{"id":"O_l","name":"L"}]}]}'
+stub_expect_json 'project view' '{"id":"PVT_x"}'
+assert_exit 0 board_ids
+assert_eq "1" "$(stub_call_count 'project field-list')" "a healthy later run retries field-list"
+assert_eq "F_status" "$(state_get '.board.statusFieldId')" "the retry completes the cache"
 
 # board_status_set adds the item if needed, then edits the field.
 stub_reset
@@ -84,25 +107,46 @@ stub_expect_json 'project item-add' '{"id":"PVTI_below_cap"}'
 assert_exit 0 board_status_set 42 Doing
 assert_contains "$(stub_calls)" "item-add" "below cap: absent issue still added"
 
-# init creates labels, ensures the board, and writes config.
+# --- init ------------------------------------------------------------------
+# T6: tear the first scratch repo down before building another, or each run
+# leaks one and ORIG_PWD is clobbered to the first scratch path so teardown
+# cd's somewhere unintended.
+teardown_scratch
 setup_scratch
+# Re-point GHT_CONFIG/GHT_STATE at the NEW scratch repo; they still name the
+# torn-down one otherwise, so every state assertion below would read nothing.
+cfg_load
+
+# init creates labels, ensures the board, caches its ids, and writes config.
+# The `project view` response is what makes board_ensure actually SUCCEED:
+# without it board_ids failed, init reported `board: skipped`, state.json was
+# never written -- and the assertions below all passed anyway, because they
+# only checked calls made BEFORE the failure. Field/option caching during
+# init had zero coverage.
 stub_reset
 stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
 stub_expect_json 'repo view' '{"nameWithOwner":"me/proj"}'
 stub_expect_json 'project list' '{"projects":[]}'
 stub_expect_json 'project create' '{"number":9,"id":"PVT_new"}'
+stub_expect_json 'project view' '{"id":"PVT_new"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
-"$GHTRACK" init >/dev/null
+out=$("$GHTRACK" init)
 assert_contains "$(stub_calls)" "label create stage:backlog" "init creates labels"
 assert_contains "$(stub_calls)" "project create" "init creates the board"
 assert_eq "9" "$(jq -r .project .claude/gh-track/config.json)" "config records project"
 assert_eq "me/proj" "$(jq -r .repo .claude/gh-track/config.json)" "config records repo"
+assert_contains "$out" "board=project 9 ready" "init reports the board ready"
+assert_contains "$out" "init=complete" "init reports completion"
+assert_eq "PVT_new" "$(state_get '.board.projectId')" "init caches the project id"
+assert_eq "F_status" "$(state_get '.board.statusFieldId')" "init caches the status field id"
+assert_eq "O_todo" "$(state_get '.board.statusOptions.Todo')" "init caches the status options"
 
 # init twice does not create a second project.
 stub_reset
 stub_expect_json 'auth status' "Token scopes: 'project'"
 stub_expect_json 'repo view' '{"nameWithOwner":"me/proj"}'
+stub_expect_json 'project view' '{"id":"PVT_new"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
 "$GHTRACK" init >/dev/null
@@ -110,6 +154,52 @@ assert_eq "0" "$(stub_call_count 'project create')" "init is idempotent"
 
 # state.json is gitignored by init.
 assert_contains "$(cat .gitignore)" ".claude/gh-track/state.json" "init gitignores state"
+
+# C4 regression: a hand-edited .gitignore frequently has no trailing newline.
+# Appending blind glued the entry onto the user's last rule -- breaking that
+# rule AND leaving state.json unignored -- and because check-ignore then
+# still failed, re-running appended a SECOND broken line instead of repairing.
+teardown_scratch
+setup_scratch
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+printf 'node_modules\n.env\nbuild' >.gitignore
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'repo'"
+"$GHTRACK" init >/dev/null
+assert_exit 0 git check-ignore -q .claude/gh-track/state.json
+assert_eq "build" "$(sed -n 3p .gitignore)" "the user's last rule is left intact"
+assert_eq ".claude/gh-track/state.json" "$(sed -n 4p .gitignore)" "the entry lands on its own line"
+"$GHTRACK" init >/dev/null
+assert_eq "1" "$(grep -c 'gh-track/state.json' .gitignore)" "re-running does not append a second entry"
+
+# I4 regression: --force makes "already exists" a non-error; it does NOT make
+# an auth or permission failure one. `init` used to print "labels: ensured"
+# and exit 0 when every single label creation had failed.
+teardown_scratch
+setup_scratch
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+stub_reset
+stub_expect 'label create' 1
+stub_expect_json 'auth status' "Token scopes: 'repo'"
+set +e
+out=$("$GHTRACK" init 2>&1)
+rc=$?
+set -e
+assert_eq "1" "$rc" "init fails when label creation fails"
+assert_contains "$out" "labels=FAILED 16 of 16" "init reports how many labels failed"
+assert_not_contains "$out" "labels=ensured" "init does not claim labels were ensured"
+assert_contains "$out" "init=incomplete" "init summary surfaces the problem"
+
+# A partial failure is reported as partial.
+stub_reset
+stub_expect 'label create size:l' 1
+stub_expect_json 'auth status' "Token scopes: 'repo'"
+set +e
+out=$("$GHTRACK" init 2>&1)
+rc=$?
+set -e
+assert_eq "1" "$rc" "one failed label still fails init"
+assert_contains "$out" "labels=FAILED 1 of 16" "partial failure counted exactly"
 
 teardown_scratch
 report

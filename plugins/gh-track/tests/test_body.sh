@@ -11,6 +11,7 @@ set -euo pipefail
 setup_scratch
 printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
 cfg_load
+scratch_slug
 cp "$TESTS_DIR/fixtures/body-sample.md" body.md
 
 # section_get returns content without the heading.
@@ -43,6 +44,73 @@ printf '## Decisions\n- New decision (spec)\n' >dec.md
 section_replace body.md "Decisions" dec.md >out3.md
 assert_contains "$(cat out3.md)" "New decision" "last section replaced"
 assert_not_contains "$(cat out3.md)" "Chose A over B" "old last section gone"
+
+# C3 regression: a sibling section sharing the heading prefix -- exactly what
+# a human adds to a "control panel" issue -- must survive, and the checklist
+# heading must not be duplicated. Unanchored prefix matching silently DELETED
+# `## Tasks Notes` and inserted the replacement heading twice, while
+# section_get returned the union of both sections.
+cat >sib.md <<'SIB'
+## Goal
+G
+
+## Tasks (from plan - 1/2)
+- [x] 1. First
+- [ ] 2. Second
+
+## Tasks Notes
+Task 2 is blocked on the vendor.
+
+## Decisions
+- Chose A over B
+SIB
+got=$(section_get sib.md "Tasks")
+assert_contains "$got" "- [ ] 2. Second" "section_get still finds the counter heading"
+assert_not_contains "$got" "vendor" "section_get does not absorb the sibling section"
+printf '## Tasks (from plan - 2/2)\n- [x] 1. First\n- [x] 2. Second\n' >sibnew.md
+section_replace sib.md "Tasks" sibnew.md >sibout.md
+sibout=$(cat sibout.md)
+assert_contains "$sibout" "## Tasks Notes" "sibling heading survives replacement"
+assert_contains "$sibout" "vendor" "sibling content survives replacement"
+assert_contains "$sibout" "- [x] 2. Second" "replacement still applied"
+assert_eq "1" "$(grep -c '^## Tasks (from plan' sibout.md)" "checklist heading not duplicated"
+assert_eq "1" "$(grep -c '^## Tasks Notes' sibout.md)" "sibling heading not duplicated"
+
+# The same, with the sibling BEFORE the checklist -- this is what requires the
+# heading match to be anchored rather than merely first-wins: an unanchored
+# prefix treats `## Tasks Notes` as the Tasks section itself, so section_get
+# returns the prose and section_replace overwrites the human's notes with the
+# checklist while the real checklist section is left untouched below.
+cat >sib2.md <<'SIB2'
+## Tasks Notes
+Task 2 is blocked on the vendor.
+
+## Tasks (from plan - 1/2)
+- [x] 1. First
+- [ ] 2. Second
+
+## Decisions
+- Chose A over B
+SIB2
+got=$(section_get sib2.md "Tasks")
+assert_contains "$got" "- [ ] 2. Second" "leading sibling does not shadow the checklist"
+assert_not_contains "$got" "vendor" "leading sibling content not returned as Tasks"
+section_replace sib2.md "Tasks" sibnew.md >sib2out.md
+sib2out=$(cat sib2out.md)
+assert_contains "$sib2out" "vendor" "leading sibling content survives replacement"
+assert_contains "$sib2out" "- [x] 2. Second" "checklist replaced, not the sibling"
+assert_eq "1" "$(grep -c '^## Tasks (from plan' sib2out.md)" "one checklist heading with a leading sibling"
+assert_eq "1" "$(grep -c '^## Tasks Notes' sib2out.md)" "leading sibling heading kept once"
+
+# An exact heading with no counter still matches.
+printf '## Tasks\n- [ ] 1. a\n\n## After\nx\n' >exact.md
+assert_eq "- [ ] 1. a" "$(section_get exact.md "Tasks" | head -1)" "exact heading matches"
+
+# A duplicated heading resolves to the FIRST section, not their union.
+printf '## Tasks\nfirst\n\n## Tasks\nsecond\n' >dup.md
+got=$(section_get dup.md "Tasks")
+assert_contains "$got" "first" "first duplicate section returned"
+assert_not_contains "$got" "second" "second duplicate section not merged in"
 
 # body_put sends the file through gh issue edit. Assertions are checked
 # independently (not as one contiguous substring) so a future reordering

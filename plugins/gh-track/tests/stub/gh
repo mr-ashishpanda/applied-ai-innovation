@@ -6,10 +6,22 @@
 #   $GH_STUB_RESPONSES  - file; TAB-separated: PATTERN <TAB> EXIT <TAB> [STDOUT_FILE]
 #   $GH_STUB_LOG.body   - snapshot of the last --body-file argument's
 #                         content, taken right now, at call time
+#   $GH_STUB_UNMATCHED  - file; one line per unmatched call whose stdout the
+#                         production code parses (see below)
+#   $GH_STUB_ALLOW_UNMATCHED=1 - opt out of that recording
 #
 # The first response whose PATTERN occurs as a substring of the joined
 # arguments wins. With no match: exit 0, empty stdout. This keeps tests
 # declarative — a test states only the calls it cares about.
+#
+# But for a call whose OUTPUT the code under test reads, "no canned
+# response" is byte-identical to a legitimate empty API result, and
+# production code treats empty as authoritative state ("no labels", "no
+# comment exists"). A missing or misspelled pattern therefore reroutes a
+# test onto its degraded path with every assertion still passing. So an
+# unmatched READ is recorded to $GH_STUB_UNMATCHED, which `report` fails on.
+# Unmatched WRITES stay silent: their stdout is discarded by the caller, and
+# requiring a canned response for every `label create` would be noise.
 set -uo pipefail
 
 args="$*"
@@ -60,6 +72,24 @@ if [ -n "${GH_STUB_RESPONSES:-}" ] && [ -f "$GH_STUB_RESPONSES" ]; then
         ;;
     esac
   done <"$GH_STUB_RESPONSES"
+fi
+
+# Nothing matched. Decide whether this call's stdout is load-bearing.
+is_read=0
+case " $args " in
+  *" --json "*|*" --jq "*|*" --format "*|*"auth status"*) is_read=1 ;;
+esac
+case "${1:-}" in
+  api) is_read=1 ;;
+esac
+# A mutating REST call's response body is not read back for state.
+case " $args " in
+  *" -X PATCH "*|*" -X POST "*|*" -X PUT "*|*" -X DELETE "*) is_read=0 ;;
+esac
+
+if [ "$is_read" = 1 ] && [ "${GH_STUB_ALLOW_UNMATCHED:-0}" != "1" ] \
+   && [ -n "${GH_STUB_UNMATCHED:-}" ]; then
+  printf 'UNMATCHED: %s\n' "$args" >>"$GH_STUB_UNMATCHED"
 fi
 
 exit 0

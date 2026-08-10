@@ -10,6 +10,14 @@ export GHTRACK PLUGIN_DIR TESTS_DIR
 FAILURES=0
 CHECKS=0
 
+# Unmatched gh reads accumulate here for the WHOLE suite: stub_reset must not
+# truncate it, or only the last segment's misses would ever be seen.
+GH_STUB_UNMATCHED="${TMPDIR:-/tmp}/ghtrack-unmatched.$$"
+export GH_STUB_UNMATCHED
+: >"$GH_STUB_UNMATCHED"
+# shellcheck disable=SC2064 # expand $GH_STUB_UNMATCHED now; it is stable for the suite.
+trap "rm -f '$GH_STUB_UNMATCHED'" EXIT
+
 fail() {
   FAILURES=$((FAILURES + 1))
   printf '  FAIL: %s\n' "$1" >&2
@@ -58,6 +66,14 @@ assert_exit() {
 }
 
 report() {
+  # An unmatched READ against the gh stub means a canned response is missing
+  # or misspelled, which silently reroutes the code under test onto its
+  # degraded path while every assertion still passes. Fail loudly on it.
+  if [ -s "${GH_STUB_UNMATCHED:-/nonexistent}" ]; then
+    printf '  FAIL: gh stub had unmatched reads (missing canned responses):\n' >&2
+    sed 's/^/    /' "$GH_STUB_UNMATCHED" >&2
+    FAILURES=$((FAILURES + 1))
+  fi
   if [ "$FAILURES" -gt 0 ]; then
     printf '  %d checks, %d FAILED\n' "$CHECKS" "$FAILURES" >&2
     exit 1
@@ -96,8 +112,15 @@ stub_expect_json() {
 
 stub_calls() { cat "$GH_STUB_LOG"; }
 
-# stub_call_count PATTERN — how many recorded calls contain PATTERN.
-stub_call_count() { grep -c -- "$1" "$GH_STUB_LOG" || true; }
+# stub_call_count PATTERN — how many recorded calls contain PATTERN as a
+# LITERAL substring. -F matters: `gh` arguments are full of regex
+# metacharacters (`.`, `[`, `*`), so a regex match would quietly count the
+# wrong calls.
+stub_call_count() { grep -c -F -- "$1" "$GH_STUB_LOG" || true; }
+
+# scratch_slug — what a subcommand's `slug_require` does, for suites that
+# source library functions directly instead of running `ghtrack`.
+scratch_slug() { GHT_SLUG=$(repo_slug); export GHT_SLUG; }
 
 # --- scratch repo ----------------------------------------------------------
 

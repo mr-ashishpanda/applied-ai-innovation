@@ -51,7 +51,18 @@ assert_eq "55" "$(resolve_issue)" "custom branch pattern"
 # The subcommand prints just the number.
 git checkout -q -b 42-again
 printf '%s' '{}' >.claude/gh-track/config.json
-assert_eq "42" "$("$GHTRACK" resolve)" "resolve subcommand output"
+assert_eq "issue=42" "$("$GHTRACK" resolve)" "resolve subcommand output"
+
+# An unresolvable workspace must not print `issue=` and exit 0: resolve_issue
+# dies with 3 inside a $(...), so the value has to be captured, not
+# interpolated straight into printf.
+# No branch number AND no recorded state (an earlier check above recorded 99
+# for this worktree, and state is keyed by toplevel).
+git checkout -q -b spike/unresolvable
+rm -f .claude/gh-track/state.json
+assert_exit 3 "$GHTRACK" resolve
+out=$("$GHTRACK" resolve 2>&1 || true)
+assert_not_contains "$out" "issue=" "no bare issue= line on an unresolvable branch"
 
 teardown_scratch
 report

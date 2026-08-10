@@ -33,7 +33,9 @@ assert_eq "docs/superpowers/plans/**/*.md" "$(cfg .planGlob)" "unset key still d
 # repo_slug prefers config and never calls gh when config has it.
 stub_reset
 assert_eq "me/proj" "$(repo_slug)" "repo_slug from config"
+scratch_slug
 assert_eq "me" "$(repo_owner)" "repo_owner splits slug"
+assert_eq "proj" "$(repo_name)" "repo_name splits slug"
 assert_eq "0" "$(stub_call_count 'repo view')" "no gh call when config has repo"
 
 # With no repo in config, repo_slug falls back to gh.
@@ -56,9 +58,42 @@ stub_reset
 stub_expect_json 'auth status' "Token scopes: 'repo'"
 stub_expect_json 'repo view' '{"nameWithOwner":"fallback/repo"}'
 out=$("$GHTRACK" doctor 2>&1 || true)
-assert_contains "$out" "repo:" "doctor reports repo line"
-assert_contains "$out" "config: MISSING" "doctor flags absent config"
-assert_contains "$out" "scope project: MISSING" "doctor flags absent project scope"
+assert_contains "$out" "repo=fallback/repo" "doctor reports repo line"
+assert_contains "$out" "config=MISSING" "doctor flags absent config"
+assert_contains "$out" "scope_project=MISSING" "doctor flags absent project scope"
+
+# C5 regression. repo_slug must never `die`: every call site is a $(...)
+# substitution, where exit kills only the subshell and the enclosing command
+# then runs with an empty --repo while the subcommand reports success.
+stub_reset
+stub_expect 'repo view' 1
+printf '%s' '{}' >.claude/gh-track/config.json
+cfg_load
+assert_exit 1 repo_slug "unresolvable repo returns 1 rather than dying"
+
+# ...and the diagnostic whose job is to catch that must actually flag it.
+stub_reset
+stub_expect 'repo view' 1
+stub_expect_json 'auth status' "Token scopes: 'repo'"
+out=$("$GHTRACK" doctor 2>&1 || true)
+assert_contains "$out" "repo=UNKNOWN" "doctor flags an unresolvable repo"
+assert_not_contains "$out" "problems=0" "doctor counts it as a problem"
+
+# ...and a mutating subcommand must refuse the write rather than exit 0.
+stub_reset
+stub_expect 'repo view' 1
+stub_expect_json 'auth status' "Token scopes: 'repo'"
+stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:spec"}]}'
+assert_exit 6 "$GHTRACK" stage 42 building
+assert_eq "0" "$(stub_call_count 'issue edit')" "no edit when the repo is unknown"
+
+# M5 regression: a non-numeric issue number is a usage error, not a write.
+stub_reset
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+assert_exit 2 "$GHTRACK" stage 'x; rm -rf /' building
+assert_exit 2 "$GHTRACK" show 'x'
+assert_exit 2 "$GHTRACK" tick 'x' --task 1
+assert_eq "0" "$(stub_call_count 'issue edit')" "no write on a bad issue number"
 
 teardown_scratch
 report
