@@ -9,6 +9,7 @@ set -euo pipefail
 . "$PLUGIN_DIR/scripts/lib/body.sh"
 
 setup_scratch
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
 cfg_load
 cp "$TESTS_DIR/fixtures/body-sample.md" body.md
 
@@ -43,15 +44,24 @@ section_replace body.md "Decisions" dec.md >out3.md
 assert_contains "$(cat out3.md)" "New decision" "last section replaced"
 assert_not_contains "$(cat out3.md)" "Chose A over B" "old last section gone"
 
-# body_put sends the file through gh issue edit.
+# body_put sends the file through gh issue edit. Assertions are checked
+# independently (not as one contiguous substring) so a future reordering
+# of flags can't break this test on a purely cosmetic basis — but a
+# missing --repo still must fail it.
 stub_reset
 body_put 42 out.md
-assert_contains "$(stub_calls)" "issue edit 42 --body-file" "body_put calls gh issue edit"
+calls=$(stub_calls)
+assert_contains "$calls" "issue edit 42" "body_put calls gh issue edit"
+assert_contains "$calls" "--body-file" "body_put passes --body-file"
+assert_contains "$calls" "--repo me/proj" "body_put passes --repo"
 
-# body_get reads through gh issue view.
+# body_get reads through gh issue view. Same independent-assertion
+# treatment, and it also confirms --repo is passed.
 stub_reset
 stub_expect_json 'issue view 42' '{"body":"hello body"}'
-assert_eq "hello body" "$(body_get 42)" "body_get returns body"
+got_body=$(body_get 42)
+assert_eq "hello body" "$got_body" "body_get returns body"
+assert_contains "$(stub_calls)" "--repo me/proj" "body_get passes --repo"
 
 teardown_scratch
 report

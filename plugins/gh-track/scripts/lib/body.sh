@@ -4,11 +4,11 @@
 # body logic cheap to test.
 
 body_get() {
-  gh issue view "$1" --json body --jq .body --repo "$(repo_slug)"
+  gh issue view "$1" --repo "$(repo_slug)" --json body --jq .body
 }
 
 body_put() {
-  gh issue edit "$1" --body-file "$2" --repo "$(repo_slug)" >/dev/null
+  gh issue edit "$1" --repo "$(repo_slug)" --body-file "$2" >/dev/null
 }
 
 # section_get BODY_FILE HEADING — content lines of `## HEADING…`, heading
