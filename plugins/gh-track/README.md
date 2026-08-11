@@ -13,6 +13,34 @@ panel — state, links, decisions. Checkpoint comments are written from what the
 agent already holds in context, so tracking costs roughly 4k tokens per feature
 and no artifact is ever re-read for tracking's sake.
 
+## Install
+
+Once per machine:
+
+```
+/plugin marketplace add mr-ashishpanda/applied-ai-innovation
+/plugin install gh-track
+```
+
+Once per project — in the repository you want tracked, ask Claude:
+
+> set up GitHub tracking in this repo
+
+That runs the `setting-up-github-tracking` skill: it creates the labels and the
+project board, writes `.claude/gh-track/config.json`, gitignores the state file,
+and merges the tracking rules into your `CLAUDE.md` between
+`<!-- gh-track:begin -->` markers. Re-running it after an upgrade replaces only
+that block.
+
+Board writes need one extra OAuth scope:
+
+```bash
+gh auth refresh -s project
+```
+
+Without it, tracking still works — labels remain canonical and you lose only the
+kanban view.
+
 ## The `ghtrack` CLI
 
 Every GitHub mutation lives in `scripts/ghtrack`, so it is deterministic,

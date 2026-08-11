@@ -45,7 +45,7 @@ applied-ai-innovation/
 
 | Plugin | Description |
 |--------|-------------|
-| [`plugins/gh-track`](./plugins/gh-track/README.md) | GitHub issue and project tracking for superpowers development workflows. Every work item becomes one issue carrying its stage, artifact links, task checklist, and a timeline of decisions — without duplicating spec or plan prose into GitHub. |
+| [`plugins/gh-track`](./plugins/gh-track/README.md) | GitHub issue and project tracking for superpowers development workflows. Every work item becomes one issue carrying its stage, artifact links, task checklist, and a timeline of decisions — without duplicating spec or plan prose into GitHub. See its README's [Install](./plugins/gh-track/README.md#install) section to set it up. |
 
 ---
 
