@@ -57,7 +57,8 @@ rm -f .claude/gh-track/config.json
 stub_reset
 stub_expect_json 'auth status' "Token scopes: 'repo'"
 stub_expect_json 'repo view' '{"nameWithOwner":"fallback/repo"}'
-out=$("$GHTRACK" doctor 2>&1 || true)
+stub_expect_json '--version' 'gh version 2.40.0 (2024-01-01)'
+out=$(ght doctor 2>&1 || true)
 assert_contains "$out" "repo=fallback/repo" "doctor reports repo line"
 assert_contains "$out" "config=MISSING" "doctor flags absent config"
 assert_contains "$out" "scope_project=MISSING" "doctor flags absent project scope"
@@ -75,7 +76,8 @@ assert_exit 1 repo_slug "unresolvable repo returns 1 rather than dying"
 stub_reset
 stub_expect 'repo view' 1
 stub_expect_json 'auth status' "Token scopes: 'repo'"
-out=$("$GHTRACK" doctor 2>&1 || true)
+stub_expect_json '--version' 'gh version 2.40.0 (2024-01-01)'
+out=$(ght doctor 2>&1 || true)
 assert_contains "$out" "repo=UNKNOWN" "doctor flags an unresolvable repo"
 assert_not_contains "$out" "problems=0" "doctor counts it as a problem"
 
@@ -84,15 +86,15 @@ stub_reset
 stub_expect 'repo view' 1
 stub_expect_json 'auth status' "Token scopes: 'repo'"
 stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:spec"}]}'
-assert_exit 6 "$GHTRACK" stage 42 building
+assert_exit 6 ght stage 42 building
 assert_eq "0" "$(stub_call_count 'issue edit')" "no edit when the repo is unknown"
 
 # M5 regression: a non-numeric issue number is a usage error, not a write.
 stub_reset
 printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
-assert_exit 2 "$GHTRACK" stage 'x; rm -rf /' building
-assert_exit 2 "$GHTRACK" show 'x'
-assert_exit 2 "$GHTRACK" tick 'x' --task 1
+assert_exit 2 ght stage 'x; rm -rf /' building
+assert_exit 2 ght show 'x'
+assert_exit 2 ght tick 'x' --task 1
 assert_eq "0" "$(stub_call_count 'issue edit')" "no write on a bad issue number"
 
 teardown_scratch

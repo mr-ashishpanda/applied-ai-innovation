@@ -65,6 +65,41 @@ assert_exit() {
   fi
 }
 
+# require_scratch WHAT — non-zero unless the CWD is inside the scratch repo.
+#
+# Nearly every subcommand resolves its config from $PWD and can WRITE there:
+# `init` creates .claude/gh-track/config.json and appends to .gitignore. A
+# test that runs the CLI outside its scratch repo therefore mutates the
+# repository the suite itself lives in. The two things that used to prevent
+# that are accidents, not guards -- the gh stub hard-fails while GH_STUB_LOG
+# is unset, and repo resolution fails without a canned `repo view` -- and
+# BOTH evaporate the moment a test cans a `repo view` response, which is a
+# single plausible mistake away. This is the structural version.
+require_scratch() {
+  local here scratch_p
+  if [ -z "${SCRATCH:-}" ]; then
+    printf 'ghtrack-tests: refusing to run [%s]: no scratch repo (missing setup_scratch)\n' \
+      "$1" >&2
+    return 1
+  fi
+  here=$(pwd -P)
+  scratch_p=$(cd "$SCRATCH" 2>/dev/null && pwd -P) || scratch_p=$SCRATCH
+  case $here in
+    "$scratch_p"|"$scratch_p"/*) return 0 ;;
+  esac
+  printf 'ghtrack-tests: refusing to run [%s] from %s: outside the scratch repo %s\n' \
+    "$1" "$here" "$scratch_p" >&2
+  return 1
+}
+
+# ght ARGS... — the CLI, guarded. Use this instead of "$GHTRACK" everywhere a
+# subcommand is exercised. Exit 99 (a code the CLI itself never returns) so a
+# tripped guard can never be mistaken for a subcommand's own failure.
+ght() {
+  require_scratch "ghtrack $*" || return 99
+  "$GHTRACK" "$@"
+}
+
 report() {
   # An unmatched READ against the gh stub means a canned response is missing
   # or misspelled, which silently reroutes the code under test onto its
@@ -143,4 +178,9 @@ teardown_scratch() {
   cd "${ORIG_PWD:-/}"
   [ -n "${SCRATCH:-}" ] && rm -rf "$SCRATCH"
   unset SCRATCH
+  # The stub inherits these through the environment, so leaving them set
+  # after teardown means a `gh` call added below this line silently succeeds
+  # against a deleted log instead of failing. Clearing them keeps "outside a
+  # scratch repo" a loud state rather than a quiet one.
+  unset GH_STUB_LOG GH_STUB_RESPONSES
 }

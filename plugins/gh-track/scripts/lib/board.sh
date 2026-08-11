@@ -13,20 +13,30 @@ board_has_scope() {
   gh auth status 2>&1 | grep -q "'project'"
 }
 
-# board_ids — resolve and cache project/field/option ids into state.json.
+# board_ids [force] — resolve and cache project/field/option ids into
+# state.json. A non-empty FORCE re-reads even when the cache looks complete.
 #
-# The short circuit requires EVERY id this function is responsible for, not
-# just the project id. projectId is persisted before `field-list` runs, so
-# gating on it alone meant one transient field-list failure cached a
-# half-built entry that no later run ever retried: the board stayed degraded
-# forever, and the warning blamed the project's field configuration rather
-# than a cache file the user does not know exists.
+# The short circuit requires every id needed to mirror STATUS, not just the
+# project id. projectId is persisted before `field-list` runs, so gating on
+# it alone meant one transient field-list failure cached a half-built entry
+# that no later run ever retried: the board stayed degraded forever, and the
+# warning blamed the project's field configuration rather than a cache file
+# the user does not know exists.
+#
+# sizeFieldId is deliberately NOT part of that gate. Most boards genuinely
+# have no Size field -- nothing here creates one, and `gh project create`
+# does not -- so gating on it would re-run `field-list` on every single
+# stage transition forever. Instead the one caller that needs it
+# (board_size_set) asks for a forced re-read when it finds it missing, which
+# costs one extra call at plan-checkpoint frequency rather than on every
+# operation.
 board_ids() {
+  local force=${1:-}
   local cached_pid cached_fid cached_opts
   cached_pid=$(state_get '.board.projectId')
   cached_fid=$(state_get '.board.statusFieldId')
   cached_opts=$(state_get '.board.statusOptions')
-  if [ -n "$cached_pid" ] && [ -n "$cached_fid" ] \
+  if [ -z "$force" ] && [ -n "$cached_pid" ] && [ -n "$cached_fid" ] \
      && [ -n "$cached_opts" ] && [ "$cached_opts" != "{}" ]; then
     return 0
   fi
@@ -144,10 +154,29 @@ board_status_set() {
 board_size_set() {
   local issue=$1 size=$2
   board_ids || return 1
-  local pid fid oid item
-  pid=$(state_get '.board.projectId')
+
+  local pid fid oid item sizename
   fid=$(state_get '.board.sizeFieldId')
-  [ -n "$fid" ] || { warn "project has no Size field; skipping"; return 1; }
+
+  # A missing Size field id is far more likely to be a stale cache than a
+  # board without the field. Nothing in gh-track creates a Size field and a
+  # freshly created project has only Status, so the field can ONLY appear
+  # after a user adds it in the UI -- which is necessarily after init/stage
+  # cached the Status ids. Without this one forced re-read the short circuit
+  # was satisfied forever: the mirror never ran again, and the warning
+  # blamed a board that by then had the field.
+  if [ -z "$fid" ]; then
+    board_ids force || return 1
+    fid=$(state_get '.board.sizeFieldId')
+  fi
+
+  sizename=$(cfg .board.sizeField)
+  [ -n "$fid" ] || {
+    warn "project has no '$sizename' field; add it on the board to mirror sizes (the size label is set either way)"
+    return 1
+  }
+
+  pid=$(state_get '.board.projectId')
   oid=$(state_get ".board.sizeOptions[\"$size\"]")
   [ -n "$oid" ] || { warn "project has no '$size' Size option"; return 1; }
   item=$(board_item_id "$issue") || return 1

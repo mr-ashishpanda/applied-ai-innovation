@@ -72,13 +72,13 @@ assert_exit 2 tasks_tick merged.md '1x'
 
 stub_reset
 stub_expect_json 'issue view 42' '{"body":"## Tasks (from plan - 0/3)\n- [ ] 1. One\n- [ ] 2. Two\n- [ ] 3. Three\n"}'
-assert_exit 2 "$GHTRACK" tick 42 --task '.*'
+assert_exit 2 ght tick 42 --task '.*'
 assert_eq "0" "$(stub_call_count 'issue edit')" "no body written for a non-numeric --task"
 
 # End to end: tasks subcommand reads the body, writes back one edit.
 stub_reset
 stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
-"$GHTRACK" tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
+ght tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
 assert_eq "1" "$(stub_call_count 'issue edit 42')" "exactly one body edit"
 
 # A body saved by GitHub's web form arrives with CRLF. body_get is the single
@@ -88,7 +88,7 @@ assert_eq "1" "$(stub_call_count 'issue edit 42')" "exactly one body edit"
 stub_reset
 stub_expect_json 'issue view 42' \
   '{"body":"## Goal\r\nG\r\n\r\n## Tasks (from plan - 0/2)\r\n- [ ] 1. First thing\r\n- [ ] 2. old\r\n"}'
-"$GHTRACK" tick 42 --task 1 >/dev/null
+ght tick 42 --task 1 >/dev/null
 sent=$(cat "${GH_STUB_LOG}.body")
 assert_contains "$sent" "- [x] 1. First thing" "CRLF body still ticks the right item"
 assert_eq "0" "$(tr -cd '\r' <"${GH_STUB_LOG}.body" | wc -c | tr -d '[:space:]')" "no CR written back to GitHub"
@@ -106,14 +106,14 @@ before=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
 
 stub_reset
 stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
-"$GHTRACK" tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
+ght tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
 after=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
 assert_eq "$before" "$after" "tasks leaves no scratch tmpdir behind"
 
 before=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
 stub_reset
 stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
-"$GHTRACK" tick 42 --task 2 >/dev/null
+ght tick 42 --task 2 >/dev/null
 after=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
 assert_eq "$before" "$after" "tick leaves no scratch tmpdir behind"
 

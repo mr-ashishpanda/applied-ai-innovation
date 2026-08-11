@@ -28,9 +28,9 @@ body='{"body":"## Goal\nG\n\n## Tasks (from plan - 0/4)\n- [ ] 1. First thing\n-
 # recomputed differently, a heading re-inserted, ticks lost).
 stub_reset
 stub_expect_json 'issue view 42' "$body"
-"$GHTRACK" tasks 42 --plan docs/superpowers/plans/p.md >/dev/null
+ght tasks 42 --plan docs/superpowers/plans/p.md >/dev/null
 cp "${GH_STUB_LOG}.body" tasks-first.md
-"$GHTRACK" tasks 42 --plan docs/superpowers/plans/p.md >/dev/null
+ght tasks 42 --plan docs/superpowers/plans/p.md >/dev/null
 cp "${GH_STUB_LOG}.body" tasks-second.md
 assert_eq "0" "$(stub_call_count 'issue create')" "tasks creates nothing"
 assert_eq "2" "$(stub_call_count 'issue edit 42')" "tasks edits once per run"
@@ -40,12 +40,12 @@ assert_eq "$(cat tasks-first.md)" "$(cat tasks-second.md)" "second tasks run sen
 stub_reset
 printf 'checkpoint text\n' >c.md
 stub_expect_json 'issues/42/comments' '[]'
-"$GHTRACK" comment 42 --event spec --sha abc1234 --file c.md >/dev/null
+ght comment 42 --event spec --sha abc1234 --file c.md >/dev/null
 first_posts=$(stub_call_count 'issue comment 42')
 stub_reset
 stub_expect_json 'issues/42/comments' \
   '[{"id":11,"body":"<!-- gh-track:spec:abc1234 -->\ncheckpoint text"}]'
-"$GHTRACK" comment 42 --event spec --sha abc1234 --file c.md >/dev/null
+ght comment 42 --event spec --sha abc1234 --file c.md >/dev/null
 assert_eq "1" "$first_posts" "first comment posted once"
 assert_eq "0" "$(stub_call_count 'issue comment 42')" "second run posted nothing"
 assert_contains "$(stub_calls)" "issues/comments/11" "second run edited instead"
@@ -62,8 +62,8 @@ stub_expect_json 'project view' '{"id":"PVT_i"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
 stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_42","content":{"number":42}}]}'
-"$GHTRACK" stage 42 planned >/dev/null
-"$GHTRACK" stage 42 planned >/dev/null
+ght stage 42 planned >/dev/null
+ght stage 42 planned >/dev/null
 assert_eq "0" "$(stub_call_count 'label create')" "stage does not create labels"
 assert_eq "2" "$(stub_call_count 'issue edit 42')" "one edit per stage run"
 second_edit=$(grep -F 'issue edit 42' "$GH_STUB_LOG" | sed -n 2p)
@@ -80,9 +80,15 @@ stub_expect_json 'project view' '{"id":"PVT_i"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]},{"id":"F_size","name":"Size","options":[{"id":"O_m","name":"M"}]}]}'
 stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_42","content":{"number":42}}]}'
-"$GHTRACK" size 42 m >/dev/null
-"$GHTRACK" size 42 m >/dev/null
+ght size 42 m >/dev/null
+ght size 42 m >/dev/null
 assert_eq "2" "$(stub_call_count 'issue edit 42')" "one edit per size run"
+# The board mirror must actually RUN here. The stage block above cached ids
+# from a Status-only field-list, and until Important 1 was fixed that stale
+# cache suppressed the re-read -- so this block exercised the label swap only
+# and its board coverage was silently inert.
+assert_contains "$(stub_calls)" "F_size" "the size runs really do reach the board"
+assert_eq "2" "$(stub_call_count 'item-edit')" "one board write per size run"
 second_edit=$(grep -F 'issue edit 42' "$GH_STUB_LOG" | sed -n 2p)
 assert_contains "$second_edit" "--add-label size:m" "second run still adds the size label"
 assert_not_contains "$second_edit" "--remove-label" "nothing to remove when the size is unchanged"
@@ -98,13 +104,13 @@ assert_not_contains "$second_edit" "--remove-label" "nothing to remove when the 
 # (by-then-deleted) path.
 stub_reset
 stub_expect_json 'issue view 42' "$body"
-"$GHTRACK" tick 42 --task 1 >/dev/null
+ght tick 42 --task 1 >/dev/null
 cp "${GH_STUB_LOG}.body" first-body.md
 stub_reset
 # shellcheck disable=SC2016 # as above: the literal backticks are the fixture.
 stub_expect_json 'issue view 42' \
   '{"body":"## Tasks (from plan - 1/4)\n- [x] 1. First thing\n- [ ] 2. Second thing\n- [ ] 3. Third thing with `code` in the title\n- [ ] 4. Fourth thing\n"}'
-"$GHTRACK" tick 42 --task 1 >/dev/null
+ght tick 42 --task 1 >/dev/null
 assert_contains "$(cat "${GH_STUB_LOG}.body")" "- [x] 1. First thing" "tick stays ticked"
 assert_contains "$(cat "${GH_STUB_LOG}.body")" "(from plan - 1/4)" "counter stable on re-tick"
 

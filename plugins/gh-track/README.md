@@ -94,11 +94,12 @@ with `show`.
 - Blob URLs take their host from `origin`'s URL (falling back to
   `github.com`), so GitHub Enterprise Server works, but a repository with no
   `origin` remote on a GHES install would get `github.com` links.
-- `board_ids` caches field ids in `state.json` and short-circuits on the
-  Status ids alone, so a board that gains its `Size` field *after* the cache
-  was written keeps warning `project has no Size field` on every `size` run.
-  Remedy: `rm .claude/gh-track/state.json` (it is gitignored scratch) and the
-  next command re-reads the board's fields.
+- Boards need a `Size` single-select field added by hand for `size` to mirror
+  anything — nothing here creates one and `gh project create` does not. When
+  it is missing, `size` still sets the label and says so. (`board_ids`
+  re-reads the board's fields once when the cached Size id is absent, so a
+  field added in the UI is picked up on the next `size` run without clearing
+  any cache.)
 - `link` emits `default_url=` (the default-branch URL that survives the work
   branch being deleted on merge), but nothing rewrites an issue body to use
   it yet — that is the Done checkpoint's job, and it belongs to the

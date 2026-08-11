@@ -46,7 +46,16 @@ cmd_new() {
       --body "Captured by gh-track. No spec yet." $args)
   fi
 
+  # The parse now shapes a WRITE -- it is what the board card is built from --
+  # so it must distinguish "no url" from a number, exactly as every other read
+  # that drives a write on this branch does. `gh issue create` exiting
+  # non-zero is already fatal under set -e; this closes the exit-0-with-empty-
+  # stdout path, which used to print a blank line and now would put a card
+  # pointing at `/issues/` on the real board.
   local number=${url##*/}
+  case $number in
+    ''|*[!0-9]*) die "issue create returned no issue url; refusing to touch the board (got: [$url])" 1 ;;
+  esac
 
   # Print the number BEFORE touching the board. The issue exists either way,
   # and the number is this command's entire contract with its caller; a board

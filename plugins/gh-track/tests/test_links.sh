@@ -70,7 +70,7 @@ git remote add origin "$SCRATCH/origin.git"
 want="path=docs/superpowers/specs/s.md"
 wanturl="head_url=https://github.com/me/proj/blob/42-thing/docs/superpowers/specs/s.md"
 
-out=$(cd docs/superpowers/specs && "$GHTRACK" link 42 --kind spec --path s.md 2>/dev/null)
+out=$(cd docs/superpowers/specs && ght link 42 --kind spec --path s.md 2>/dev/null)
 assert_contains "$out" "$want" "subdirectory-relative path normalised"
 assert_contains "$out" "$wanturl" "subdirectory-relative path builds the right url"
 assert_contains "$out" "sha=$sha" "sha still resolves for a normalised path"
@@ -93,25 +93,25 @@ export GIT_CALL_LOG
 : >"$GIT_CALL_LOG"
 old_path=$PATH
 PATH="$SCRATCH/bin:$PATH"
-"$GHTRACK" link 42 --kind spec --path docs/superpowers/specs/s.md >/dev/null 2>&1
+ght link 42 --kind spec --path docs/superpowers/specs/s.md >/dev/null 2>&1
 PATH=$old_path
 assert_eq "1" "$(grep -c -F -- 'log -1 --format=%h' "$GIT_CALL_LOG")" \
   "B3: link resolves the sha with a single git log"
 
-out=$("$GHTRACK" link 42 --kind spec --path "$PWD/docs/superpowers/specs/s.md" 2>/dev/null)
+out=$(ght link 42 --kind spec --path "$PWD/docs/superpowers/specs/s.md" 2>/dev/null)
 assert_contains "$out" "$wanturl" "absolute path normalised"
 
-out=$("$GHTRACK" link 42 --kind spec --path ./docs/superpowers/specs/s.md 2>/dev/null)
+out=$(ght link 42 --kind spec --path ./docs/superpowers/specs/s.md 2>/dev/null)
 assert_contains "$out" "$wanturl" "dot-prefixed path normalised"
 
 # A path outside the repository is a usage error, not a nonsense URL.
-assert_exit 2 "$GHTRACK" link 42 --kind spec --path /etc/hosts
+assert_exit 2 ght link 42 --kind spec --path /etc/hosts
 
 # Characters that would break the URL are encoded (ledger #21).
 mkdir -p "d"
 printf 'x\n' >"d/a b#c.md"
 git add d && git commit -q -m "spacey"
-out=$("$GHTRACK" link 42 --kind spec --path "d/a b#c.md" 2>/dev/null)
+out=$(ght link 42 --kind spec --path "d/a b#c.md" 2>/dev/null)
 assert_contains "$out" "blob/42-thing/d/a%20b%23c.md" "space and hash url-encoded"
 
 # M3: the host comes from origin, so GitHub Enterprise Server is not sent to
@@ -126,7 +126,7 @@ assert_eq "github.com" "$(gh_host)" "github.com when there is no remote"
 # T3/M2: with no remote the push fails, and degradation must be visible in
 # what the output SAYS -- not merely in `path=`, which is printed
 # unconditionally and so asserted nothing about degradation at all.
-out=$("$GHTRACK" link 42 --kind spec --path docs/superpowers/specs/s.md 2>/dev/null)
+out=$(ght link 42 --kind spec --path docs/superpowers/specs/s.md 2>/dev/null)
 assert_contains "$out" "docs/superpowers/specs/s.md" "output names the path"
 assert_contains "$out" "pushed=no" "degraded run reports the failed push"
 assert_contains "$out" "head_url=" "degraded run emits the key"

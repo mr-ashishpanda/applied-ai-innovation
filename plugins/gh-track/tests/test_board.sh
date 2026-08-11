@@ -115,7 +115,7 @@ stub_reset
 stub_expect_json 'issue create' 'https://github.com/me/proj/issues/77'
 stub_expect_json 'project item-list' '{"items":[]}'
 stub_expect_json 'project item-add' '{"id":"PVTI_77"}'
-out=$("$GHTRACK" new --kind feature --title "Add a thing")
+out=$(ght new --kind feature --title "Add a thing")
 assert_eq "77" "$out" "new still prints only the issue number"
 calls=$(stub_calls)
 assert_contains "$calls" "item-add" "new adds the new issue to the board"
@@ -128,7 +128,7 @@ stub_reset
 stub_expect_json 'issue create' 'https://github.com/me/proj/issues/78'
 stub_expect 'project item-list' 1
 set +e
-out=$("$GHTRACK" new --kind bug --title "b" 2>/dev/null)
+out=$(ght new --kind bug --title "b" 2>/dev/null)
 rc=$?
 set -e
 assert_eq "0" "$rc" "a board failure does not fail new"
@@ -139,16 +139,36 @@ stub_reset
 stub_expect_json 'issue create' 'https://github.com/me/proj/issues/79'
 stub_expect_json 'project item-list' '{"items":[]}'
 stub_expect_json 'project item-add' '{"id":"PVTI_79"}'
-"$GHTRACK" new --kind chore --title c --size l >/dev/null
+ght new --kind chore --title c --size l >/dev/null
 calls=$(stub_calls)
 assert_contains "$calls" "--label size:l" "the size label is applied at creation"
 assert_contains "$calls" "O_l" "the board Size field is written with it"
+
+# Important-2 regression: the parsed issue number now shapes a WRITE (it is
+# what the card is built from), so an unparseable one must refuse it. With
+# `gh issue create` exiting 0 and printing nothing, A1 created a card
+# pointing at `.../issues/` and reported success; before A1 the same input
+# merely printed a blank line.
+stub_reset
+stub_expect 'issue create' 0
+stub_expect_json 'project item-list' '{"items":[]}'
+stub_expect_json 'project item-add' '{"id":"PVTI_bad"}'
+assert_exit 1 ght new --kind feature --title x
+assert_eq "0" "$(stub_call_count 'item-add')" "no board card from an unparsed issue number"
+assert_eq "0" "$(stub_call_count 'item-edit')" "no board write from an unparsed issue number"
+
+# A url whose last segment is not a number is the same hazard.
+stub_reset
+stub_expect_json 'issue create' 'not-a-url'
+stub_expect_json 'project item-add' '{"id":"PVTI_bad"}'
+assert_exit 1 ght new --kind bug --title y
+assert_eq "0" "$(stub_call_count 'item-add')" "no board card from a non-numeric issue number"
 
 # --- size mirrors the board's Size field (A2) ------------------------------
 stub_reset
 stub_expect_json 'issue view 55' '{"labels":[{"name":"size:s"}]}'
 stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_55","content":{"number":55}}]}'
-"$GHTRACK" size 55 m >/dev/null
+ght size 55 m >/dev/null
 calls=$(stub_calls)
 assert_contains "$calls" "item-edit" "size edits the board field"
 assert_contains "$calls" "F_size" "size targets the Size field, not Status"
@@ -158,7 +178,53 @@ assert_contains "$calls" "O_m" "size uses the M option id for size:m"
 stub_reset
 stub_expect_json 'issue view 55' '{"labels":[]}'
 stub_expect 'project item-list' 1
-assert_exit 0 "$GHTRACK" size 55 l
+assert_exit 0 ght size 55 l
+
+# Important-1 regression: a stale cache permanently disabled the mirror A2
+# exists to add. NOTHING in gh-track creates a Size field and a freshly
+# created project has only Status, so the field can only ever appear AFTER
+# init/stage cached the Status ids -- at which point the short circuit was
+# satisfied forever. `size` then warned "project has no Size field" about a
+# board that had one, and never re-read field-list to find out.
+size_fields='{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]},{"id":"F_size","name":"Size","options":[{"id":"O_m","name":"M"},{"id":"O_l","name":"L"}]}]}'
+# Ids as init/stage would have cached them from a Status-only board.
+printf '%s' '{"board":{"projectId":"PVT_x","statusFieldId":"F_status","statusOptions":{"Backlog":"O_backlog"}}}' \
+  >.claude/gh-track/state.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'project'"
+stub_expect_json 'project view' '{"id":"PVT_x"}'
+stub_expect_json 'project field-list' "$size_fields"
+stub_expect_json 'issue view 60' '{"labels":[]}'
+stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_60","content":{"number":60}}]}'
+out=$(ght size 60 m 2>&1)
+assert_eq "1" "$(stub_call_count 'project field-list')" \
+  "a missing Size field id forces exactly one re-read"
+assert_contains "$(stub_calls)" "F_size" "the board Size field is written after the re-read"
+assert_not_contains "$out" "has no" "no false 'project has no Size field' warning"
+assert_eq "F_size" "$(state_get '.board.sizeFieldId')" "the refreshed id is cached"
+
+# ...and the re-read happens ONCE: the repaired cache is used from then on.
+stub_reset
+stub_expect_json 'issue view 60' '{"labels":[{"name":"size:m"}]}'
+stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_60","content":{"number":60}}]}'
+ght size 60 l >/dev/null
+assert_eq "0" "$(stub_call_count 'project field-list')" "the repaired cache is not re-read again"
+assert_contains "$(stub_calls)" "O_l" "the repaired cache still drives the mirror"
+
+# A board that GENUINELY has no Size field: one re-read, then a warning that
+# names the field and tells the user what to do -- and the label is still set.
+printf '%s' '{"board":{"projectId":"PVT_x","statusFieldId":"F_status","statusOptions":{"Backlog":"O_backlog"}}}' \
+  >.claude/gh-track/state.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'project'"
+stub_expect_json 'project view' '{"id":"PVT_x"}'
+stub_expect_json 'project field-list' \
+  '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
+stub_expect_json 'issue view 61' '{"labels":[]}'
+out=$(ght size 61 l 2>&1)
+assert_eq "1" "$(stub_call_count 'project field-list')" "one re-read before giving up"
+assert_contains "$out" "add it on the board" "the warning says how to fix it"
+assert_contains "$out" "size set: #61 -> l" "the label is set even with no Size field on the board"
 
 # --- init ------------------------------------------------------------------
 # T6: tear the first scratch repo down before building another, or each run
@@ -184,7 +250,7 @@ stub_expect_json 'project create' '{"number":9,"id":"PVT_new"}'
 stub_expect_json 'project view' '{"id":"PVT_new"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
-out=$("$GHTRACK" init)
+out=$(ght init)
 assert_contains "$(stub_calls)" "label create stage:backlog" "init creates labels"
 assert_contains "$(stub_calls)" "project create" "init creates the board"
 assert_eq "9" "$(jq -r .project .claude/gh-track/config.json)" "config records project"
@@ -202,7 +268,7 @@ stub_expect_json 'repo view' '{"nameWithOwner":"me/proj"}'
 stub_expect_json 'project view' '{"id":"PVT_new"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
-"$GHTRACK" init >/dev/null
+ght init >/dev/null
 assert_eq "0" "$(stub_call_count 'project create')" "init is idempotent"
 
 # state.json is gitignored by init.
@@ -218,11 +284,11 @@ printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
 printf 'node_modules\n.env\nbuild' >.gitignore
 stub_reset
 stub_expect_json 'auth status' "Token scopes: 'repo'"
-"$GHTRACK" init >/dev/null
+ght init >/dev/null
 assert_exit 0 git check-ignore -q .claude/gh-track/state.json
 assert_eq "build" "$(sed -n 3p .gitignore)" "the user's last rule is left intact"
 assert_eq ".claude/gh-track/state.json" "$(sed -n 4p .gitignore)" "the entry lands on its own line"
-"$GHTRACK" init >/dev/null
+ght init >/dev/null
 assert_eq "1" "$(grep -c 'gh-track/state.json' .gitignore)" "re-running does not append a second entry"
 
 # I4 regression: --force makes "already exists" a non-error; it does NOT make
@@ -235,7 +301,7 @@ stub_reset
 stub_expect 'label create' 1
 stub_expect_json 'auth status' "Token scopes: 'repo'"
 set +e
-out=$("$GHTRACK" init 2>&1)
+out=$(ght init 2>&1)
 rc=$?
 set -e
 assert_eq "1" "$rc" "init fails when label creation fails"
@@ -248,7 +314,7 @@ stub_reset
 stub_expect 'label create size:l' 1
 stub_expect_json 'auth status' "Token scopes: 'repo'"
 set +e
-out=$("$GHTRACK" init 2>&1)
+out=$(ght init 2>&1)
 rc=$?
 set -e
 assert_eq "1" "$rc" "one failed label still fails init"
@@ -266,7 +332,7 @@ stub_reset
 stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
 stub_expect 'project list' 1
 stub_expect_json 'project create' '{"number":9,"id":"PVT_dup"}'
-out=$("$GHTRACK" init 2>&1)
+out=$(ght init 2>&1)
 assert_eq "0" "$(stub_call_count 'project create')" "a failed project list creates no board"
 assert_contains "$out" "board=skipped" "init reports the board as not set up"
 assert_eq "" "$(jq -r '.project // empty' .claude/gh-track/config.json)" \
@@ -277,7 +343,7 @@ stub_reset
 stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
 stub_expect_json 'project list' '<html>504 Gateway Timeout</html>'
 stub_expect_json 'project create' '{"number":9,"id":"PVT_dup"}'
-out=$("$GHTRACK" init 2>&1)
+out=$(ght init 2>&1)
 assert_eq "0" "$(stub_call_count 'project create')" "an unparseable project list creates no board"
 assert_contains "$out" "board=skipped" "unparseable list also reports the board as not set up"
 
@@ -289,7 +355,7 @@ stub_expect_json 'project create' '{"number":12,"id":"PVT_ok"}'
 stub_expect_json 'project view' '{"id":"PVT_ok"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
-out=$("$GHTRACK" init 2>&1)
+out=$(ght init 2>&1)
 assert_eq "1" "$(stub_call_count 'project create')" "an empty list still creates the board"
 assert_eq "12" "$(jq -r .project .claude/gh-track/config.json)" "the new project is recorded"
 
@@ -303,7 +369,7 @@ stub_expect_json 'project list' '{"projects":[{"number":5,"title":"proj"}]}'
 stub_expect_json 'project view' '{"id":"PVT_existing"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
-"$GHTRACK" init >/dev/null
+ght init >/dev/null
 assert_eq "0" "$(stub_call_count 'project create')" "an existing board is linked, not duplicated"
 assert_eq "5" "$(jq -r .project .claude/gh-track/config.json)" "config records the existing board"
 

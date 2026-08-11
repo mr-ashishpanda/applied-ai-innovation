@@ -120,14 +120,14 @@ assert_contains "$(stub_calls)" "--add-label size:s" "unlabelled issue still get
 # The subcommand: valid run, bad size, non-numeric issue number.
 stub_reset
 stub_expect_json 'issue view 42' '{"labels":[{"name":"size:s"}]}'
-out=$("$GHTRACK" size 42 m)
+out=$(ght size 42 m)
 assert_eq "size set: #42 -> m" "$out" "size prints a one-line confirmation"
 assert_contains "$(stub_calls)" "--add-label size:m" "size subcommand edits the label"
 
 stub_reset
-assert_exit 2 "$GHTRACK" size 42 xl
-assert_exit 2 "$GHTRACK" size 42
-assert_exit 2 "$GHTRACK" size notanumber m
+assert_exit 2 ght size 42 xl
+assert_exit 2 ght size 42
+assert_exit 2 ght size notanumber m
 assert_eq "0" "$(stub_call_count 'issue edit')" "no write on a bad size argument"
 
 # issue_stage reads the current stage.
@@ -138,7 +138,7 @@ assert_eq "building" "$(issue_stage 42)" "reads current stage"
 # new creates at stage:backlog with the kind label.
 stub_reset
 stub_expect_json 'issue create' 'https://github.com/me/proj/issues/77'
-out=$("$GHTRACK" new --kind feature --title "Add a thing")
+out=$(ght new --kind feature --title "Add a thing")
 assert_eq "77" "$out" "new prints the issue number"
 calls=$(stub_calls)
 assert_contains "$calls" "--label stage:backlog" "created at backlog"
@@ -149,14 +149,14 @@ assert_eq "0" "$(stub_call_count 'project ')" "no board calls when no project is
 
 # An invalid kind is rejected before any write.
 stub_reset
-assert_exit 2 "$GHTRACK" new --kind nonsense --title x
+assert_exit 2 ght new --kind nonsense --title x
 assert_eq "0" "$(stub_call_count 'issue create')" "no write on bad kind"
 
 # show prints compact key=value lines.
 stub_reset
 stub_expect_json 'issue view 42' \
   '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:building"},{"name":"kind:feature"},{"name":"size:m"}],"body":"## Tasks (from plan - 2/4)\n- [x] 1. a\n- [x] 2. b\n- [ ] 3. c\n- [ ] 4. d\n"}'
-out=$("$GHTRACK" show 42)
+out=$(ght show 42)
 assert_contains "$out" "stage=building" "show reports stage"
 assert_contains "$out" "kind=feature" "show reports kind"
 assert_contains "$out" "size=m" "show reports size"
@@ -169,7 +169,7 @@ crlf_body='## Artifacts\r\n- Spec: [docs/s.md](https://github.com/me/proj/blob/x
 stub_reset
 stub_expect_json 'issue view 42' \
   "{\"number\":42,\"title\":\"T\",\"state\":\"OPEN\",\"labels\":[{\"name\":\"stage:spec\"}],\"body\":\"$crlf_body\"}"
-out=$("$GHTRACK" show 42)
+out=$(ght show 42)
 assert_contains "$out" "spec=https://github.com/me/proj/blob/x/docs/s.md" "CRLF body still yields the spec link"
 assert_contains "$out" "plan=https://github.com/me/proj/blob/x/docs/p.md" "CRLF body still yields the plan link"
 assert_contains "$out" "tasks=1/2" "CRLF body still yields the checklist counter"
@@ -186,7 +186,7 @@ before=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
 stub_reset
 stub_expect_json 'issue view 42' \
   '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:building"}],"body":"## Tasks (from plan - 0/1)\n- [ ] 1. a\n"}'
-"$GHTRACK" show 42 >/dev/null
+ght show 42 >/dev/null
 after=$(find "$tmp_root" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | sort)
 assert_eq "$before" "$after" "show leaves no scratch tmpdir behind"
 
