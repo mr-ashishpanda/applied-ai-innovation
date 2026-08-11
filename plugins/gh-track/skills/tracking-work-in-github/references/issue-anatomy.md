@@ -102,6 +102,23 @@ every deviation from what was originally agreed.
 **Revised:** [spec](PINNED_URL) · [plan](PINNED_URL)
 ```
 
+### split
+
+Posted on the **parent**, once per sub-issue created.
+
+```markdown
+**Split into sub-issue #77.** Plan 2: <title, one line>
+
+Same spec, second plan — tracked separately from here on.
+```
+
+Also append one line to the parent's `## Decisions`, the first time this
+happens for that parent (never again after):
+
+```markdown
+- Decomposed into sub-issues — plan 1 stays on the parent, plan 2+ tracked as sub-issues (spec)
+```
+
 ### blocked
 
 ```markdown

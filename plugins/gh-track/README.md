@@ -58,6 +58,7 @@ idempotent, and testable without a model.
 | `body N [--file F]` | Print the current body (no `--file`), or replace it wholesale (`--file`). |
 | `comment N --event E --file F` | Post or edit a marked checkpoint comment. |
 | `link N --kind spec\|plan --path P` | Push the branch, print artifact URLs. |
+| `split N --plan P --title T [--size S]` | Create a GitHub-native sub-issue under `N` for a spec's 2nd+ plan; prints the number. |
 | `tasks N --plan P` | Sync the body checklist from a plan's task headings. |
 | `tick N --task K` | Mark checklist item K complete. |
 
@@ -97,8 +98,7 @@ idempotent, and testable without a model.
 
 Three conventions, chosen by what the caller does with the output:
 
-**Single-value accessors print a bare value, no key** — `resolve`, `new`,
-`--version`. They exist to be captured directly:
+**Single-value accessors print a bare value, no key** — `resolve`, `new`, `split`, `--version`. They exist to be captured directly:
 
 ```bash
 issue=$(ghtrack resolve) || exit 0     # empty stdout and exit 3 if unresolvable
@@ -137,6 +137,13 @@ with `show`.
   branch being deleted on merge), but nothing rewrites an issue body to use
   it yet — that is the Done checkpoint's job, and it belongs to the
   lifecycle skill in a later plan.
+- `split`'s plan-path → sub-issue-number idempotency is cached in `state.json`,
+  which is local and git-ignored. Losing it (a fresh clone, a fresh worktree)
+  degrades to "a repeat `split` for the same plan creates a second sub-issue"
+  — human-visible and fixable by closing the duplicate — never to a
+  corrupted rollup: the rollup itself (`stage`'s parent recomputation) reads
+  GitHub's own `parent`/`sub_issues` endpoints and the durable `plan1:*`
+  label, not `state.json`, so it is always correct from a fresh clone.
 
 ## Running the tests
 

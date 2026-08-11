@@ -53,6 +53,20 @@ the decision rule that keeps scope changes from becoming duplicate issues.
 The rule in one line: a change to work already in flight is a `scope-change`
 comment on the existing issue, never a new issue.
 
+### Mid-build: does new work need its own plan?
+
+When work surfaces mid-build, decide its size the same way `writing-plans`
+already would:
+
+- **Fits the current checklist** (a few items, no new design questions) —
+  a `scope-change` checkpoint, checklist grown in place. Nothing new here.
+- **Needs its own task breakdown, same spec** — write it as a new plan
+  (`superpowers:writing-plans`, same issue). The very next plan checkpoint
+  is now a *second* plan for this issue, which routes through `ghtrack
+  split` above automatically. No separate decision to make.
+- **A different problem entirely** — a new, independent issue per
+  `references/intake.md`.
+
 ## Checkpoints
 
 **REQUIRED READ:** `references/issue-anatomy.md` for the body and comment
@@ -64,10 +78,34 @@ Six events, each with a fixed shape:
 |---|---|---|
 | `spec` | A design doc was written and committed | `ghtrack stage N spec`, add the spec link to the body |
 | `plan` | A plan was written and committed | `ghtrack stage N planned`, `ghtrack tasks N --plan FILE`, `ghtrack size N s\|m\|l` |
+| `plan` (2nd+ for this issue) | A second plan was written for the same spec | `ghtrack split ISSUE --plan FILE --title T`, then run the `plan` checkpoint steps below against the **new sub-issue number**, and post a `split` comment on the parent (see `references/issue-anatomy.md`) |
 | `build-started` | Execution begins | `ghtrack stage N building` |
 | `scope-change` | Agreed scope changed | Revise spec/plan, re-run `ghtrack tasks`, add a `## Decisions` line |
 | `blocked` | You cannot proceed | Add the `blocked` label |
 | `done` | Merged | `ghtrack stage N done`, rewrite body links to the default branch, close the issue |
+
+### When a plan checkpoint fires for the SECOND time on one issue
+
+The first plan for an issue is handled by the `plan` row above, unchanged.
+A second (or later) distinct plan artifact for the same issue means the spec
+decomposed into more than one plan — run `ghtrack split ISSUE --plan FILE
+--title T` first. It prints a new sub-issue number; run the rest of the plan
+checkpoint (`link`, `tasks`, the `plan` comment, `stage ... planned`) against
+**that number**, not the parent. Then post one `split` comment on the parent:
+
+```bash
+ghtrack comment PARENT --event split --sha SUBISSUE_NUMBER --file FILE
+```
+
+using the template in `references/issue-anatomy.md`. This is the same
+marked-comment mechanism as every other checkpoint — `SUBISSUE_NUMBER`
+just fills the idempotency-key slot that a SHA fills everywhere else, so
+re-running the same split's checkpoint edits the same comment rather than
+duplicating it.
+
+The parent's own stage is never touched directly here — `ghtrack stage`
+already recomputes it from the sub-issue automatically (see the CLI's
+`split`/`stage` behavior) the next time either issue's stage changes.
 
 On the bug track, `spec` and `plan` are replaced by `repro` and `root-cause`.
 
