@@ -27,6 +27,7 @@ usage: ghtrack <subcommand> [options]
   body N --file F                     replace the issue body
   comment N --event E --file F        post or edit a marked comment
   link N --kind spec|plan --path P     push branch, print artifact URLs
+  split N --plan P --title T [--size S]  create a sub-issue for a spec's 2nd+ plan
   tasks N --plan P                    sync body checklist from a plan
   tick N --task K                     mark checklist item K complete
 
@@ -46,7 +47,7 @@ main() {
   shift
 
   case $sub in
-    doctor|init|new|resolve|show|stage|size|body|comment|link|tasks|tick)
+    doctor|init|new|resolve|show|stage|size|body|comment|link|tasks|tick|split)
       # shellcheck source=/dev/null
       . "$GHT_LIB/cmd_$sub.sh"
       "cmd_$sub" "$@"
