@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# body — replace an issue body wholesale from a rendered file.
+# body — read the current issue body, or replace it wholesale from a
+# rendered file. Read mode is the sanctioned way to see what a section this
+# command doesn't own currently contains before rewriting the body, since
+# body_put is a full replace, not a patch.
 
 # shellcheck source=SCRIPTDIR/config.sh
 . "$GHT_LIB/config.sh"
@@ -19,7 +22,10 @@ cmd_body() {
       *) die "body: unexpected argument: $1" 2 ;;
     esac
   done
-  [ -n "$file" ] || die "body requires --file FILE" 2
+  if [ -z "$file" ]; then
+    body_get "$issue"
+    return 0
+  fi
   [ -f "$file" ] || die "no such file: $file" 2
   body_put "$issue" "$file"
   printf 'body updated: #%s\n' "$issue"

@@ -36,9 +36,11 @@ rewrite, so there is no need to build it by hand.
 then the checkpoint it came from in parentheses. It is the digest of the comment
 timeline, so the body alone answers "why is it like this?"
 
-To update the body: fetch it, edit the section you own, write it back with
-`ghtrack body N --file FILE`. For the checklist, use `ghtrack tasks` and
-`ghtrack tick` instead — they handle the counter and preserve existing ticks.
+To update the body: read the current body with `ghtrack body N` (no `--file`),
+edit the section you own, write the whole thing back with `ghtrack body N
+--file FILE` — it is a full replace, not a patch. For the checklist, use
+`ghtrack tasks` and `ghtrack tick` instead — they handle the counter and
+preserve existing ticks.
 
 ## Comments — one per checkpoint event, ≤12 lines
 

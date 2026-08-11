@@ -17,13 +17,13 @@ Create a todo per item and complete them in order.
 
 1. **Diagnose.** Run `ghtrack doctor`. Read every line before acting — it tells
    you what is already in place and what is missing.
-2. **Confirm the repository.** Show the user the `repo:` line from `doctor` and
+2. **Confirm the repository.** Show the user the `repo=` line from `doctor` and
    confirm it is the repository they want tracked. Never write to a repository
    the user has not confirmed.
 3. **Handle a missing `project` scope.** If `doctor` reports
-   `scope project: MISSING`, tell the user board writes will be skipped and that
-   the fix is `gh auth refresh -s project`. Ask whether to proceed label-only or
-   wait. Both are valid — labels are canonical.
+   `scope_project=MISSING - ...`, tell the user board writes will be skipped and
+   that the fix is `gh auth refresh -s project`. Ask whether to proceed
+   label-only or wait. Both are valid — labels are canonical.
 4. **Initialise.** Run `ghtrack init`. It creates labels, finds or creates the
    board, writes `.claude/gh-track/config.json`, and gitignores
    `.claude/gh-track/state.json`.
@@ -55,7 +55,7 @@ If it is `2` or more, you duplicated the block: remove the extras.
 ## Scope adaptation
 
 If the user's superpowers artifacts do not live at `docs/superpowers/specs/` and
-`docs/superpowers/plans/` — `doctor` reports `artifacts: MISMATCH` — ask where
+`docs/superpowers/plans/` — `doctor` reports `artifacts=MISMATCH - ...` — ask where
 they do live and set `specGlob` and `planGlob` in
 `.claude/gh-track/config.json` accordingly. This is the designed adaptation
 point for superpowers convention changes; do not edit skill files instead.

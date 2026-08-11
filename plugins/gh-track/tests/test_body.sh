@@ -131,5 +131,18 @@ got_body=$(body_get 42)
 assert_eq "hello body" "$got_body" "body_get returns body"
 assert_contains "$(stub_calls)" "--repo me/proj" "body_get passes --repo"
 
+# cmd_body dispatch: no --file reads the current body verbatim.
+stub_reset
+stub_expect_json 'issue view 42' '{"body":"hello from github"}'
+got_cli=$(ght body 42)
+assert_eq "hello from github" "$got_cli" "ghtrack body N with no --file prints the current body"
+
+# cmd_body dispatch: --file still replaces wholesale.
+stub_reset
+printf 'new body\n' >replace.md
+msg=$(ght body 42 --file replace.md)
+assert_contains "$msg" "body updated: #42" "ghtrack body N --file confirms the update"
+assert_contains "$(stub_calls)" "issue edit 42" "ghtrack body N --file calls gh issue edit"
+
 teardown_scratch
 report

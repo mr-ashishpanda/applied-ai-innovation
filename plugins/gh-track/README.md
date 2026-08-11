@@ -27,7 +27,7 @@ idempotent, and testable without a model.
 | `show N` | Issue state as compact `key=value` lines. |
 | `stage N STAGE` | Swap the stage label, mirror board Status. |
 | `size N s\|m\|l` | Swap the size label, mirror the board's Size field. Set at the plan checkpoint. |
-| `body N --file F` | Replace the issue body. |
+| `body N [--file F]` | Print the current body (no `--file`), or replace it wholesale (`--file`). |
 | `comment N --event E --file F` | Post or edit a marked checkpoint comment. |
 | `link N --kind spec\|plan --path P` | Push the branch, print artifact URLs. |
 | `tasks N --plan P` | Sync the body checklist from a plan's task headings. |
@@ -85,8 +85,13 @@ break every call site, including the plugin's hook scripts.
 `doctor`, `init`. One per line, values unquoted and possibly empty. This is
 the machine-readable surface; parse these.
 
+**`body N` with no `--file` is the one exception: it prints the raw current
+body to stdout**, unmodified except for the CRLF normalisation every body
+read gets. This is the sanctioned way to see the content of a section you
+don't own before rewriting the body wholesale — there is no patch mode.
+
 **Mutating commands print a one-line human confirmation** — `stage`, `size`,
-`body`, `comment`, `tasks`, `tick`. Do not parse the prose; read state back
+`body --file`, `comment`, `tasks`, `tick`. Do not parse the prose; read state back
 with `show`.
 
 ### Known limitations

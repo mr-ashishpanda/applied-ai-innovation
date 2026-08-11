@@ -85,8 +85,11 @@ Every checkpoint is the same four steps:
 2. **Write the comment to a file**, using the matching template from
    `references/issue-anatomy.md`, then
    `ghtrack comment N --event EVENT --file FILE --sha SHA`.
-3. **Update the body:** artifact links, `## Decisions` line, and stage in the
-   header. Use `ghtrack tasks` for the checklist rather than editing it by hand.
+3. **Update the body:** read it with `ghtrack body N`, edit the artifact
+   links, `## Decisions` line, and header in place, then write the whole
+   body back with `ghtrack body N --file FILE` — it's a full replace, not a
+   patch. Use `ghtrack tasks` for the checklist rather than editing it by
+   hand.
 4. **Advance the stage:** `ghtrack stage N <stage>`.
 
 Do these in this order. The comment is the record; if step 3 or 4 fails, the
