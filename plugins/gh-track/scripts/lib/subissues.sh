@@ -75,8 +75,17 @@ rollup_stage_from_rank() {
 # min(plan 1's own stage, every child's stage), floored at building, and
 # write it with the ordinary stage_set (label + board, unchanged). CHILDREN
 # is a space-separated list of issue numbers, already resolved by the caller.
+# Best-effort: never dies. Returns 1 if unable to read the parent's current
+# labels (stage_set would need them), after which the whole write is skipped.
 rollup_apply() {
   local parent=$1 children=$2 plan1 c min_rank cur_rank floor_rank target
+
+  # Guard: ensure the parent's labels are readable before calling stage_set.
+  # stage_set would die if this fails, so we catch it early and return 1.
+  issue_labels "$parent" >/dev/null || {
+    warn "cannot read labels for issue #$parent; skipping rollup"
+    return 1
+  }
 
   plan1=$(issue_plan1_stage "$parent")
   [ -n "$plan1" ] || plan1=$(issue_stage "$parent")

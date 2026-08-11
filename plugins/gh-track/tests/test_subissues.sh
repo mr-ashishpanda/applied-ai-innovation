@@ -85,5 +85,13 @@ stub_expect_json 'issue view 5' '{"labels":[{"name":"stage:done"}]}'
 rollup_apply 2 "5"
 assert_contains "$(stub_calls)" "--add-label stage:building" "no recorded plan1 stage floors at building, never planned"
 
+# --- rollup_apply: guard against unreadable parent labels --------------------
+# If the parent's labels cannot be read, rollup_apply must return 1 and never
+# call stage_set (which would die). This is the "best-effort" contract.
+stub_reset
+stub_expect 'issue view 2' 1
+assert_exit 1 rollup_apply 2 "5"
+assert_eq "0" "$(stub_call_count 'issue edit')" "no write attempted when parent labels unreadable"
+
 teardown_scratch
 report
