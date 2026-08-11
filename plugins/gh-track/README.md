@@ -133,12 +133,16 @@ need the `project` OAuth scope: `gh auth refresh -s project`.
 `hooks/hooks.json` registers two hooks: `artifact-changed.sh` on
 `PostToolUse` (Write/Edit/NotebookEdit), which notices writes under
 `docs/superpowers/**` and reminds the agent to checkpoint the tracking issue,
-and a `session-context.sh` stub on `SessionStart` that Task 3 will fill in.
-Skills and the CLAUDE.md template that wire `ghtrack` more fully into Claude
-Code sessions are not yet written — they belong to later tasks in this plan.
-Installing today gets you a plugin with zero skills, agents, MCP/LSP servers,
-and two harness-only hooks; `scripts/ghtrack` is still a standalone bash tool
-nothing but those hooks calls automatically.
+and `session-context.sh` on `SessionStart`, which resolves the current
+branch's issue and surfaces its state at session start.
+`skills/setting-up-github-tracking/SKILL.md` is the one skill shipped so far:
+a per-repository bootstrap that runs `ghtrack doctor`/`init` and merges
+`skills/tracking-work-in-github/references/claude-md-block.md` verbatim into
+the project's `CLAUDE.md`. The `tracking-work-in-github` skill itself — the
+full intake-and-checkpoint lifecycle that this template's rules point at — is
+a later task in this plan; only its `references/claude-md-block.md` exists so
+far. Installing today gets you a plugin with one skill, zero agents,
+MCP/LSP servers, and two harness-only hooks.
 
 The marketplace lists `gh-track` with `"source": "./plugins/gh-track"` — a
 path relative to the marketplace manifest, since both live in this
@@ -146,11 +150,12 @@ repository. This was verified empirically with the `claude` CLI: `claude
 plugin marketplace add ./` (run from the repo root; a bare `.` is rejected)
 successfully added the marketplace from a **local path**, and `claude plugin
 install gh-track@applied-ai-innovation` installed it with the correct
-version and description; `claude plugin details gh-track` reports a
-component inventory of `Hooks (2)` (`PostToolUse`, `SessionStart`) and zero
-skills, agents, and MCP/LSP servers. The relative form
-works because the CLI resolves `source` against the marketplace's own
-location, not against the process's working directory — no fallback to the
-`git-subdir` form was needed. Adding the marketplace from the GitHub remote
-(`owner/repo`) would only see pushed commits, so local-path verification is
-what proves a manifest correct before a branch merges.
+version and description; `claude plugin details gh-track` now reports a
+component inventory of `Skills (1)` (`setting-up-github-tracking`) and
+`Hooks (2)` (`PostToolUse`, `SessionStart`), with zero agents and MCP/LSP
+servers. The relative form works because the CLI resolves `source` against
+the marketplace's own location, not against the process's working
+directory — no fallback to the `git-subdir` form was needed. Adding the
+marketplace from the GitHub remote (`owner/repo`) would only see pushed
+commits, so local-path verification is what proves a manifest correct before
+a branch merges.
