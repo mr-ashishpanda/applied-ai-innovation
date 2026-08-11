@@ -1,0 +1,12 @@
+{
+  "name": "gh-track",
+  "description": "GitHub issue and project tracking for superpowers development workflows. Every work item becomes one issue carrying its stage, artifact links, task checklist, and a timeline of decisions - without duplicating spec or plan prose into GitHub.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ashish Panda"
+  },
+  "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/gh-track",
+  "repository": "https://github.com/mr-ashishpanda/applied-ai-innovation",
+  "license": "MIT",
+  "keywords": ["github", "issues", "projects", "superpowers", "tracking", "workflow"]
+}

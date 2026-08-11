@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "applied-ai-innovation",
+  "description": "Applied AI tooling: Claude Code plugins and skills for practical development workflows",
+  "owner": {
+    "name": "Ashish Panda"
+  },
+  "plugins": [
+    {
+      "name": "gh-track",
+      "description": "GitHub issue and project tracking for superpowers development workflows.",
+      "author": { "name": "Ashish Panda" },
+      "category": "workflow",
+      "source": "./plugins/gh-track",
+      "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/gh-track"
+    }
+  ]
+}
