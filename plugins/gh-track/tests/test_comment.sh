@@ -21,6 +21,9 @@ assert_exit 0 comment_is_singleton "done"
 assert_exit 1 comment_is_singleton scope-change
 assert_exit 1 comment_is_singleton blocked
 
+assert_exit 0 comment_event_known split
+assert_exit 1 comment_is_singleton split
+
 printf 'Spec agreed. Decisions: ...\n' >c.md
 
 # No existing comment -> create.

@@ -7,7 +7,7 @@
 # keyed by SHA — same SHA edits, new SHA posts.
 
 COMMENT_EVENTS_SINGLETON="spec plan build-started done"
-COMMENT_EVENTS_REPEATABLE="scope-change blocked repro root-cause"
+COMMENT_EVENTS_REPEATABLE="scope-change blocked repro root-cause split"
 
 comment_event_known() {
   case " $COMMENT_EVENTS_SINGLETON $COMMENT_EVENTS_REPEATABLE " in
