@@ -51,7 +51,10 @@ assert_eq "55" "$(resolve_issue)" "custom branch pattern"
 # The subcommand prints just the number.
 git checkout -q -b 42-again
 printf '%s' '{}' >.claude/gh-track/config.json
-assert_eq "issue=42" "$("$GHTRACK" resolve)" "resolve subcommand output"
+# A BARE number, by design: hook scripts do `issue=$(ghtrack resolve)`.
+assert_eq "42" "$("$GHTRACK" resolve)" "resolve subcommand output"
+assert_eq "77" "$("$GHTRACK" resolve --set 77)" "resolve --set echoes a bare number"
+assert_eq "42" "$("$GHTRACK" resolve)" "branch still wins after --set"
 
 # An unresolvable workspace must not print `issue=` and exit 0: resolve_issue
 # dies with 3 inside a $(...), so the value has to be captured, not
@@ -61,8 +64,12 @@ assert_eq "issue=42" "$("$GHTRACK" resolve)" "resolve subcommand output"
 git checkout -q -b spike/unresolvable
 rm -f .claude/gh-track/state.json
 assert_exit 3 "$GHTRACK" resolve
-out=$("$GHTRACK" resolve 2>&1 || true)
-assert_not_contains "$out" "issue=" "no bare issue= line on an unresolvable branch"
+# Nothing on STDOUT when it fails -- a caller doing `n=$(ghtrack resolve)` must
+# get an empty string, not a stray line it would treat as an issue number.
+out=$("$GHTRACK" resolve 2>/dev/null || true)
+assert_eq "" "$out" "unresolvable branch prints nothing on stdout"
+err=$("$GHTRACK" resolve 2>&1 >/dev/null || true)
+assert_contains "$err" "cannot resolve issue" "the reason goes to stderr"
 
 teardown_scratch
 report

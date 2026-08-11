@@ -66,14 +66,27 @@ idempotent, and testable without a model.
 
 ### Output conventions
 
-The read-only subcommands — `doctor`, `resolve`, `show`, `link` — emit
-`key=value` lines, one per line, values unquoted and possibly empty. That is
-the machine-readable surface; parse those.
+Three conventions, chosen by what the caller does with the output:
 
-The mutating subcommands — `new`, `stage`, `body`, `comment`, `tasks`, `tick`
-— emit a one-line prose confirmation instead, except `new`, which prints the
-bare issue number so it can be captured directly. Do not parse the prose;
-read state back with `show`.
+**Single-value accessors print a bare value, no key** — `resolve`, `new`,
+`--version`. They exist to be captured directly:
+
+```bash
+issue=$(ghtrack resolve) || exit 0     # empty stdout and exit 3 if unresolvable
+number=$(ghtrack new --kind feature --title "...")
+```
+
+This is deliberate, and it is the analogue of `git rev-parse`. Do not "make
+them consistent" with the multi-field commands — a `key=value` line would
+break every call site, including the plugin's hook scripts.
+
+**Multi-field read commands print `key=value` lines** — `show`, `link`,
+`doctor`, `init`. One per line, values unquoted and possibly empty. This is
+the machine-readable surface; parse these.
+
+**Mutating commands print a one-line human confirmation** — `stage`, `body`,
+`comment`, `tasks`, `tick`. Do not parse the prose; read state back with
+`show`.
 
 ### Known limitations
 
