@@ -82,6 +82,14 @@ esac
 case "${1:-}" in
   api) is_read=1 ;;
 esac
+# `gh issue create` carries no --json/--jq/--format, so the flag test above
+# classified it as a write and stayed silent -- yet cmd_new PARSES its stdout
+# (the printed URL is where the issue number comes from). A misspelled canned
+# response therefore produced an empty number, exit 0, and no UNMATCHED line.
+# Classification follows what the caller does with stdout, not the flags.
+case " $args " in
+  *" issue create "*) is_read=1 ;;
+esac
 # A mutating REST call's response body is not read back for state.
 case " $args " in
   *" -X PATCH "*|*" -X POST "*|*" -X PUT "*|*" -X DELETE "*) is_read=0 ;;

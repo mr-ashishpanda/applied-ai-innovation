@@ -170,9 +170,21 @@ board_ensure() {
   title=$(repo_name)
 
   if [ -z "$proj" ]; then
-    local existing
-    existing=$(gh project list --owner "$owner" --format json 2>/dev/null \
-      | jq -r --arg t "$title" '.projects[] | select(.title == $t) | .number // empty' \
+    # The list drives a CREATE, so a failed list must not read as "no board
+    # with this title": piped straight into jq, a `project list` that errored
+    # produced the same empty answer as an empty account and fell through to
+    # `project create`, giving a repo that already had a board a SECOND one
+    # while reporting `init=complete`. Capture the listing, prove it parses,
+    # and refuse the write otherwise. Warn and return 1 rather than aborting:
+    # nothing in this file ever kills the process, so init simply reports the
+    # board as not set up and labels remain the source of truth.
+    local listing existing
+    listing=$(gh project list --owner "$owner" --format json 2>/dev/null) \
+      || { warn "cannot list projects for owner $owner; not creating a board that may already exist"; return 1; }
+    printf '%s' "$listing" | jq -e '.projects' >/dev/null 2>&1 \
+      || { warn "unreadable project list for owner $owner; not creating a board that may already exist"; return 1; }
+    existing=$(printf '%s' "$listing" \
+      | jq -r --arg t "$title" '.projects[] | select(.title == $t) | .number // empty' 2>/dev/null \
       | head -1)
     if [ -n "$existing" ]; then
       proj=$existing

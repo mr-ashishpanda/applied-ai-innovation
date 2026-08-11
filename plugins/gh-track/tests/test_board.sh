@@ -201,5 +201,58 @@ set -e
 assert_eq "1" "$rc" "one failed label still fails init"
 assert_contains "$out" "labels=FAILED 1 of 16" "partial failure counted exactly"
 
+# B1 regression: `project list` drives a CREATE, so a FAILED list must not
+# read as "no project with this title". Piped straight into jq, an errored
+# list produced the same empty answer as an empty account and fell through to
+# `project create` -- a repository that already had a board got a SECOND one,
+# reported as `init=complete`, exit 0.
+teardown_scratch
+setup_scratch
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
+stub_expect 'project list' 1
+stub_expect_json 'project create' '{"number":9,"id":"PVT_dup"}'
+out=$("$GHTRACK" init 2>&1)
+assert_eq "0" "$(stub_call_count 'project create')" "a failed project list creates no board"
+assert_contains "$out" "board=skipped" "init reports the board as not set up"
+assert_eq "" "$(jq -r '.project // empty' .claude/gh-track/config.json)" \
+  "no project number recorded from a failed list"
+
+# A list that "succeeds" with something unparseable is the same hazard.
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
+stub_expect_json 'project list' '<html>504 Gateway Timeout</html>'
+stub_expect_json 'project create' '{"number":9,"id":"PVT_dup"}'
+out=$("$GHTRACK" init 2>&1)
+assert_eq "0" "$(stub_call_count 'project create')" "an unparseable project list creates no board"
+assert_contains "$out" "board=skipped" "unparseable list also reports the board as not set up"
+
+# The healthy path still creates one: this must refuse failures, not everything.
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
+stub_expect_json 'project list' '{"projects":[]}'
+stub_expect_json 'project create' '{"number":12,"id":"PVT_ok"}'
+stub_expect_json 'project view' '{"id":"PVT_ok"}'
+stub_expect_json 'project field-list' \
+  '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
+out=$("$GHTRACK" init 2>&1)
+assert_eq "1" "$(stub_call_count 'project create')" "an empty list still creates the board"
+assert_eq "12" "$(jq -r .project .claude/gh-track/config.json)" "the new project is recorded"
+
+# An EXISTING board with a matching title is linked, never duplicated.
+teardown_scratch
+setup_scratch
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
+stub_expect_json 'project list' '{"projects":[{"number":5,"title":"proj"}]}'
+stub_expect_json 'project view' '{"id":"PVT_existing"}'
+stub_expect_json 'project field-list' \
+  '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
+"$GHTRACK" init >/dev/null
+assert_eq "0" "$(stub_call_count 'project create')" "an existing board is linked, not duplicated"
+assert_eq "5" "$(jq -r .project .claude/gh-track/config.json)" "config records the existing board"
+
 teardown_scratch
 report

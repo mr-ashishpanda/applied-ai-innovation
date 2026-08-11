@@ -36,16 +36,26 @@ cmd_link() {
   local pushed=yes
   link_push || pushed=no
 
-  # One call, two lines -- link_urls runs git and reads config, so calling
-  # it twice doubled the subprocess work for identical output.
-  local urls head_url pin_url
+  # One call, three lines -- link_urls runs git and reads config, so calling
+  # it twice doubled the subprocess work for identical output. The sha comes
+  # off line 3 for the same reason: `sha=$(link_sha ...)` here re-ran the
+  # very `git log` link_urls had just run.
+  local urls head_url pin_url sha
   urls=$(link_urls "$path")
   head_url=$(printf '%s\n' "$urls" | sed -n 1p)
   pin_url=$(printf '%s\n' "$urls" | sed -n 2p)
+  sha=$(printf '%s\n' "$urls" | sed -n 3p)
 
-  # Without a successful push these URLs resolve to nothing on GitHub.
-  # Degradation is a plain path, not a confident-looking dead link.
-  if [ "$pushed" = no ]; then
+  # The default-branch URL is what the Done checkpoint rewrites body links
+  # to, since the work branch is usually deleted on merge and its links
+  # would rot. Emitting it here keeps the CLI's job to "compute the URLs";
+  # deciding when to swap them belongs to the lifecycle skill.
+  local default_url=""
+  if [ "$pushed" = yes ]; then
+    default_url=$(link_default_url "$path")
+  else
+    # Without a successful push these URLs resolve to nothing on GitHub.
+    # Degradation is an empty value, not a confident-looking dead link.
     head_url=""
     pin_url=""
   fi
@@ -53,7 +63,8 @@ cmd_link() {
   printf 'kind=%s\n' "$kind"
   printf 'path=%s\n' "$path"
   printf 'pushed=%s\n' "$pushed"
-  printf 'sha=%s\n' "$(link_sha "$path")"
+  printf 'sha=%s\n' "$sha"
   printf 'head_url=%s\n' "$head_url"
   printf 'pinned_url=%s\n' "$pin_url"
+  printf 'default_url=%s\n' "$default_url"
 }

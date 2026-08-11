@@ -28,6 +28,15 @@ head_url=$(sed -n 1p urls.txt)
 pin_url=$(sed -n 2p urls.txt)
 assert_eq "https://github.com/me/proj/blob/42-thing/docs/superpowers/specs/s.md" "$head_url" "HEAD url"
 assert_eq "https://github.com/me/proj/blob/$sha/docs/superpowers/specs/s.md" "$pin_url" "pinned url"
+# M6/B3: line 3 carries the sha link_urls already computed, so cmd_link does
+# not re-run `git log` for a value it was just handed.
+assert_eq "$sha" "$(sed -n 3p urls.txt)" "link_urls also reports the sha it used"
+
+# A3: link_default_url points at the repository's default branch -- the link
+# that survives the work branch being deleted on merge.
+stub_expect_json 'repo view' '{"defaultBranchRef":{"name":"trunk"}}'
+assert_eq "https://github.com/me/proj/blob/trunk/docs/superpowers/specs/s.md" \
+  "$(link_default_url docs/superpowers/specs/s.md)" "default-branch url"
 
 # An untracked path yields empty urls rather than a bogus link.
 printf 'x\n' >untracked.md
@@ -66,6 +75,29 @@ assert_contains "$out" "$want" "subdirectory-relative path normalised"
 assert_contains "$out" "$wanturl" "subdirectory-relative path builds the right url"
 assert_contains "$out" "sha=$sha" "sha still resolves for a normalised path"
 
+assert_contains "$out" "default_url=https://github.com/me/proj/blob/trunk/docs/superpowers/specs/s.md" \
+  "A3: link emits the default-branch url alongside head and pinned"
+
+# B3: link_sha ran twice per run -- once inside link_urls, once again to
+# print sha=. A git wrapper on PATH counts the invocations; the duplicate is
+# invisible in the output, so only a call count can catch it.
+mkdir -p "$SCRATCH/bin"
+cat >"$SCRATCH/bin/git" <<'EOS'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GIT_CALL_LOG"
+exec /usr/bin/git "$@"
+EOS
+chmod +x "$SCRATCH/bin/git"
+GIT_CALL_LOG="$SCRATCH/git-calls.log"
+export GIT_CALL_LOG
+: >"$GIT_CALL_LOG"
+old_path=$PATH
+PATH="$SCRATCH/bin:$PATH"
+"$GHTRACK" link 42 --kind spec --path docs/superpowers/specs/s.md >/dev/null 2>&1
+PATH=$old_path
+assert_eq "1" "$(grep -c -F -- 'log -1 --format=%h' "$GIT_CALL_LOG")" \
+  "B3: link resolves the sha with a single git log"
+
 out=$("$GHTRACK" link 42 --kind spec --path "$PWD/docs/superpowers/specs/s.md" 2>/dev/null)
 assert_contains "$out" "$wanturl" "absolute path normalised"
 
@@ -100,6 +132,10 @@ assert_contains "$out" "pushed=no" "degraded run reports the failed push"
 assert_contains "$out" "head_url=" "degraded run emits the key"
 assert_not_contains "$out" "head_url=https" "no confident url when nothing was pushed"
 assert_not_contains "$out" "pinned_url=https" "no pinned url when nothing was pushed"
+# A3 + M2: the default-branch url degrades the same way -- key present,
+# value empty, never a plausible-looking link to something unpushed.
+assert_contains "$out" "default_url=" "degraded run emits the default_url key"
+assert_not_contains "$out" "default_url=https" "no default-branch url when nothing was pushed"
 
 teardown_scratch
 report

@@ -76,7 +76,11 @@ link_blob_url() {
   printf 'https://%s/%s/blob/%s/%s\n' "$(gh_host)" "$GHT_SLUG" "$1" "$(link_url_encode "$2")"
 }
 
-# link_urls PATH — line 1: branch-HEAD url, line 2: SHA-pinned url.
+# link_urls PATH — line 1: branch-HEAD url, line 2: SHA-pinned url, line 3:
+# the short SHA both were built from.
+#
+# Line 3 exists so callers that print the sha do not have to run `git log`
+# a second time for the value this function already computed.
 link_urls() {
   local path=$1 branch sha
   branch=$(git branch --show-current 2>/dev/null || true)
@@ -92,6 +96,7 @@ link_urls() {
   else
     printf '\n'
   fi
+  printf '%s\n' "$sha"
 }
 
 # link_default_url PATH — url on the default branch, for the Done rewrite.
