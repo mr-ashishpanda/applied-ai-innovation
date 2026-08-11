@@ -5,7 +5,13 @@
 TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PLUGIN_DIR=$(cd "$TESTS_DIR/.." && pwd)
 GHTRACK="$PLUGIN_DIR/scripts/ghtrack"
-export GHTRACK PLUGIN_DIR TESTS_DIR
+# Hook scripts (plugins/gh-track/hooks/*) locate ghtrack via
+# $CLAUDE_PLUGIN_ROOT/scripts/ghtrack at runtime, the same way Claude Code
+# itself sets it when the plugin is installed. Tests exercise those hooks
+# directly with `bash`, outside any real plugin runtime, so this stands in
+# for that environment variable.
+CLAUDE_PLUGIN_ROOT="$PLUGIN_DIR"
+export GHTRACK PLUGIN_DIR TESTS_DIR CLAUDE_PLUGIN_ROOT
 
 FAILURES=0
 CHECKS=0
