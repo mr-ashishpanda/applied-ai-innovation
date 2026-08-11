@@ -79,6 +79,9 @@ labels_ensure() {
   for s in $GHT_STAGES; do
     label_create "stage:$s" BFD4F2 "gh-track lifecycle stage"
   done
+  for s in $GHT_STAGES; do
+    label_create "plan1:$s" A9D1F5 "gh-track: a split parent's own stage, independent of its rolled-up display"
+  done
   for s in $GHT_KINDS; do
     label_create "kind:$s" D4C5F9 "gh-track work kind"
   done
@@ -104,6 +107,33 @@ issue_labels() {
 
 issue_stage() {
   issue_labels "$1" | sed -n 's/^stage://p' | head -1
+}
+
+# issue_plan1_stage N — a split parent's own recorded stage, or empty if this
+# issue has never been split (see subissues.sh's rollup_apply).
+issue_plan1_stage() {
+  issue_labels "$1" | sed -n 's/^plan1://p' | head -1
+}
+
+# plan1_set N STAGE — swap the plan1:* label. Same swap-and-refuse discipline
+# as stage_set, but this label is never mirrored to the board: it is
+# gh-track's own bookkeeping, never a user-facing status.
+plan1_set() {
+  local issue=$1 want=$2
+  stage_valid "$want" || die "unknown stage: $want" 2
+
+  local args="" s current
+  current=$(issue_labels "$issue") \
+    || die "cannot read current labels for issue #$issue; refusing to change plan1 stage (no write performed)" 6
+  for s in $GHT_STAGES; do
+    if [ "$s" != "$want" ] && printf '%s\n' "$current" | grep -qx "plan1:$s"; then
+      args="$args --remove-label plan1:$s"
+    fi
+  done
+
+  # shellcheck disable=SC2086 # args is a deliberately word-split flag list
+  gh issue edit "$issue" --repo "$GHT_SLUG" \
+    --add-label "plan1:$want" $args >/dev/null
 }
 
 # stage_set N STAGE — swap the stage label in one edit, then mirror the

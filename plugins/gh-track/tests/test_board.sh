@@ -356,7 +356,7 @@ out=$(ght init 2>&1)
 rc=$?
 set -e
 assert_eq "1" "$rc" "init fails when label creation fails"
-assert_contains "$out" "labels=FAILED 16 of 16" "init reports how many labels failed"
+assert_contains "$out" "labels=FAILED 24 of 24" "init reports how many labels failed"
 assert_not_contains "$out" "labels=ensured" "init does not claim labels were ensured"
 assert_contains "$out" "init=incomplete" "init summary surfaces the problem"
 
@@ -369,7 +369,7 @@ out=$(ght init 2>&1)
 rc=$?
 set -e
 assert_eq "1" "$rc" "one failed label still fails init"
-assert_contains "$out" "labels=FAILED 1 of 16" "partial failure counted exactly"
+assert_contains "$out" "labels=FAILED 1 of 24" "partial failure counted exactly"
 
 # B1 regression: `project list` drives a CREATE, so a FAILED list must not
 # read as "no project with this title". Piped straight into jq, an errored

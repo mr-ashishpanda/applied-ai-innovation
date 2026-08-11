@@ -135,6 +135,40 @@ stub_reset
 stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:building"},{"name":"size:m"}]}'
 assert_eq "building" "$(issue_stage 42)" "reads current stage"
 
+# --- plan1:* (sub-issues addendum) --------------------------------------
+# plan1:* mirrors stage:* exactly, but is never mirrored to the board and
+# never touched by ordinary stage_set -- it is gh-track's own durable memory
+# of a split parent's own progress, independent of its rolled-up display.
+stub_reset
+stub_expect_json 'issue view 2' '{"labels":[{"name":"plan1:building"}]}'
+assert_eq "building" "$(issue_plan1_stage 2)" "reads current plan1 stage"
+
+stub_reset
+stub_expect_json 'issue view 2' '{"labels":[{"name":"plan1:building"},{"name":"stage:building"}]}'
+plan1_set 2 review
+calls=$(stub_calls)
+assert_contains "$calls" "--add-label plan1:review" "adds the new plan1 stage"
+assert_contains "$calls" "--remove-label plan1:building" "removes the old plan1 stage"
+assert_not_contains "$calls" "--remove-label stage:building" "leaves the real stage:* label alone"
+assert_eq "1" "$(stub_call_count 'issue edit 2')" "single edit call"
+
+# Setting the plan1 stage it already has is a no-op edit, not an error.
+stub_reset
+stub_expect_json 'issue view 2' '{"labels":[{"name":"plan1:review"}]}'
+assert_exit 0 plan1_set 2 review
+
+# C1 discipline, same as stage_set/size_set: a failed label read must refuse
+# the write rather than turn the SWAP into an ADD.
+stub_reset
+stub_expect 'issue view 2' 1
+assert_exit 6 plan1_set 2 review
+assert_eq "0" "$(stub_call_count 'issue edit')" "no partial edit on a failed read"
+
+# labels_ensure creates a plan1:* label for every stage, same as stage:*.
+stub_reset
+labels_ensure
+assert_contains "$(stub_calls)" "label create plan1:building --force" "creates plan1 label"
+
 # new creates at stage:backlog with the kind label.
 stub_reset
 stub_expect_json 'issue create' 'https://github.com/me/proj/issues/77'
