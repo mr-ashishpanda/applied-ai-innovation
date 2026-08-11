@@ -129,12 +129,16 @@ need the `project` OAuth scope: `gh auth refresh -s project`.
 ## Packaging
 
 `plugins/gh-track/.claude-plugin/plugin.json` and the repository-root
-`.claude-plugin/marketplace.json` make this plugin installable, but hooks
-(`hooks.json`), skills, and the CLAUDE.md template that wire `ghtrack` into
-Claude Code sessions are not yet written — they belong to later tasks in this
-plan. Installing today gets you a plugin with zero skills, agents, hooks, or
-MCP/LSP servers; `scripts/ghtrack` is still a standalone bash tool nothing
-calls automatically yet.
+`.claude-plugin/marketplace.json` make this plugin installable.
+`hooks/hooks.json` registers two hooks: `artifact-changed.sh` on
+`PostToolUse` (Write/Edit/NotebookEdit), which notices writes under
+`docs/superpowers/**` and reminds the agent to checkpoint the tracking issue,
+and a `session-context.sh` stub on `SessionStart` that Task 3 will fill in.
+Skills and the CLAUDE.md template that wire `ghtrack` more fully into Claude
+Code sessions are not yet written — they belong to later tasks in this plan.
+Installing today gets you a plugin with zero skills, agents, MCP/LSP servers,
+and two harness-only hooks; `scripts/ghtrack` is still a standalone bash tool
+nothing but those hooks calls automatically.
 
 The marketplace lists `gh-track` with `"source": "./plugins/gh-track"` — a
 path relative to the marketplace manifest, since both live in this
@@ -142,7 +146,9 @@ repository. This was verified empirically with the `claude` CLI: `claude
 plugin marketplace add ./` (run from the repo root; a bare `.` is rejected)
 successfully added the marketplace from a **local path**, and `claude plugin
 install gh-track@applied-ai-innovation` installed it with the correct
-version, description, and an empty component inventory. The relative form
+version and description; `claude plugin details gh-track` reports a
+component inventory of `Hooks (2)` (`PostToolUse`, `SessionStart`) and zero
+skills, agents, and MCP/LSP servers. The relative form
 works because the CLI resolves `source` against the marketplace's own
 location, not against the process's working directory — no fallback to the
 `git-subdir` form was needed. Adding the marketplace from the GitHub remote

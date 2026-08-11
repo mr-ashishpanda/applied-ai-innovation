@@ -62,28 +62,39 @@ fi
 issue=$("$ghtrack" resolve 2>/dev/null) || exit 0
 [ -n "$issue" ] || exit 0
 
-# Debounce on (path, content hash) so iterative editing of the same
-# unchanged artifact does not spam reminders. Only the single MOST RECENT
-# notification is remembered (not a full per-path history): touching a
-# different artifact in between, then returning to this one, nudges again
-# even if this artifact's own content has not changed since last time -
-# it is no longer the thing the agent was just told about.
+# Debounce on content hash, per path, so a repeated write with unchanged
+# content produces no reminder for THAT file - this is what keeps iterative
+# editing of a single artifact from spamming reminders. It is deliberately a
+# map keyed by path, not a single "last nudge" pointer: alternating writes
+# between two different artifacts (e.g. spec, then plan, then spec again) is
+# the normal workflow, and each file's own unchanged-content debounce must
+# survive a write to a different file in between.
 hash=$(git hash-object "$file" 2>/dev/null || true)
 [ -n "$hash" ] || exit 0
 state="$root/.claude/gh-track/state.json"
+key=$(printf '%s' "$rel" | tr -c 'a-zA-Z0-9' '_')
 if [ -f "$state" ]; then
-  last_path=$(jq -r '.lastNudge.path // empty' "$state" 2>/dev/null || true)
-  last_hash=$(jq -r '.lastNudge.hash // empty' "$state" 2>/dev/null || true)
-  [ "$last_path" = "$rel" ] && [ "$last_hash" = "$hash" ] && exit 0
+  seen=$(jq -r --arg k "$key" '.nudged[$k] // empty' "$state" 2>/dev/null || true)
+  [ "$seen" = "$hash" ] && exit 0
 fi
-mkdir -p "$(dirname "$state")"
-[ -f "$state" ] || printf '%s' '{}' >"$state"
+# A state-file problem must degrade to "always nudge" (noisy but correct),
+# never to "never nudge" (silent and useless) - so stderr from a read-only
+# or missing state dir is swallowed and the nudge proceeds regardless of
+# whether persistence succeeds.
+#
+# Redirections below deliberately put "2>/dev/null" BEFORE the possibly-
+# failing ">" target: bash applies redirections left-to-right, and when a
+# stdout target can't be opened (read-only or missing dir), bash prints its
+# own "Permission denied" notice to whatever fd 2 already is at that point
+# in the list - so stderr must already be silenced before the failing
+# redirect is attempted, not after.
+mkdir -p "$(dirname "$state")" 2>/dev/null || true
+[ -f "$state" ] || { printf '%s' '{}' 2>/dev/null >"$state"; } || true
 tmp="$state.tmp.$$"
-if jq --arg p "$rel" --arg h "$hash" '.lastNudge = {path: $p, hash: $h}' \
-    "$state" >"$tmp" 2>/dev/null; then
-  mv "$tmp" "$state"
+if jq --arg k "$key" --arg h "$hash" '.nudged[$k] = $h' "$state" 2>/dev/null >"$tmp"; then
+  mv "$tmp" "$state" 2>/dev/null || rm -f "$tmp"
 else
-  rm -f "$tmp"
+  rm -f "$tmp" 2>/dev/null || true
 fi
 
 case $rel in
