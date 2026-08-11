@@ -55,8 +55,14 @@ assert_contains "$(stub_calls)" "issues/comments/11" "second run edited instead"
 # "no label create" is likewise inert (only labels_ensure creates labels), so
 # assert what the second `issue edit` actually CARRIES: still the add, and no
 # spurious removal of the very label being set.
+#
+# Issue 42 is a single-plan issue (no parent, no children): cmd_stage's
+# rollup lookups still run, so both relationship reads must be stubbed even
+# though neither yields anything for this issue.
 stub_reset
 stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:planned"}]}'
+stub_expect_json 'issues/42/sub_issues' '[]'
+stub_expect 'issues/42/parent' 1
 stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
 stub_expect_json 'project view' '{"id":"PVT_i"}'
 stub_expect_json 'project field-list' \

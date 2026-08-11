@@ -93,5 +93,39 @@ stub_expect 'issue view 2' 1
 assert_exit 1 rollup_apply 2 "5"
 assert_eq "0" "$(stub_call_count 'issue edit')" "no write attempted when parent labels unreadable"
 
+# --- cmd_stage rollup routing (CLI level) ------------------------------------
+# Setting a CHILD's stage recomputes and writes the PARENT's rolled-up stage.
+stub_reset
+stub_expect_json 'issue view 5' '{"labels":[{"name":"stage:done"}]}'
+stub_expect_json 'issues/5/sub_issues' '[]'
+stub_expect_json 'issues/5/parent' '{"number":2}'
+stub_expect_json 'issues/2/sub_issues' '[{"number":5}]'
+stub_expect_json 'issue view 2' '{"labels":[{"name":"plan1:done"}]}'
+out=$(ght stage 5 "done")
+assert_eq "stage set: #5 -> done" "$out" "stage still reports the issue it was called on"
+assert_contains "$(stub_calls)" "--add-label stage:done" "parent rolled up to done"
+assert_eq "1" "$(stub_call_count 'issue edit 2')" "exactly one rollup edit on the parent"
+
+# Setting the PARENT's own stage directly updates plan1:* and still floors
+# at building when a child lags behind.
+stub_reset
+stub_expect_json 'issue view 2' '{"labels":[{"name":"stage:building"},{"name":"plan1:building"}]}'
+stub_expect_json 'issues/2/sub_issues' '[{"number":5}]'
+stub_expect 'issues/2/parent' 1
+stub_expect_json 'issue view 5' '{"labels":[{"name":"stage:building"}]}'
+ght stage 2 review >/dev/null
+calls=$(stub_calls)
+assert_contains "$calls" "--add-label plan1:review" "direct stage call updates plan1 first"
+assert_contains "$calls" "--add-label stage:building" "still floored at building while the child lags"
+
+# A single-plan issue (no parent, no children) is completely unchanged: both
+# relationship lookups come back empty and nothing further runs.
+stub_reset
+stub_expect_json 'issue view 9' '{"labels":[{"name":"stage:planned"}]}'
+stub_expect_json 'issues/9/sub_issues' '[]'
+stub_expect 'issues/9/parent' 1
+ght stage 9 building >/dev/null
+assert_eq "1" "$(stub_call_count 'issue edit 9')" "exactly one edit -- no rollup machinery engaged"
+
 teardown_scratch
 report
