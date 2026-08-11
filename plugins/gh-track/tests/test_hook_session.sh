@@ -37,6 +37,47 @@ stub_expect_json 'issue view 42' \
   '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:triage"},{"name":"kind:bug"}],"body":""}'
 out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
 assert_contains "$out" "systematic-debugging" "bug triage suggests debugging skill"
+assert_contains "$out" "repro" "triage suggests the repro checkpoint"
+
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:debugging"},{"name":"kind:bug"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_contains "$out" "root-cause" "debugging suggests posting the root-cause checkpoint"
+assert_contains "$out" "stage building" "debugging suggests moving to stage building"
+assert_not_contains "$out" "systematic-debugging" "debugging's message is distinct from triage's"
+
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:building"},{"name":"kind:feature"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_contains "$out" "ghtrack tick" "building suggests ticking checklist items"
+assert_contains "$out" "'blocked'" "building suggests posting blocked if stalled"
+assert_not_contains "$out" "root-cause" "building's message is distinct from debugging's"
+
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:review"},{"name":"kind:feature"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_contains "$out" "'done' checkpoint once merged" "review suggests posting done once merged"
+assert_not_contains "$out" "ghtrack tick" "review's message is distinct from building's"
+
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:done"},{"name":"kind:feature"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_contains "$out" "Confirm before starting new work" "done suggests confirming before new work"
+assert_not_contains "$out" "once merged" "done's message is distinct from review's"
+
+# An issue with NO stage:* label at all must not fall through to silence -
+# that would be indistinguishable from "no issue resolved" and would strand
+# exactly the session this hook exists to orient.
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"kind:feature"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_exit 0 test -n "$out"
+assert_contains "$out" "ghtrack stage" "unknown stage names the remedy"
 
 # No resolvable issue - silent.
 git checkout -q -b spike/none
