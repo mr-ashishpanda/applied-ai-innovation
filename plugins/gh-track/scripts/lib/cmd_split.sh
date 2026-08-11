@@ -43,8 +43,18 @@ cmd_split() {
   # to at split time, because the new issue's body (which will eventually
   # carry the plan link) is written by the calling skill AFTER split
   # returns, not before.
-  local existing
-  existing=$(state_get ".splits[\"$plan\"]")
+  #
+  # Keyed by "$issue:$plan", not by plan alone: two different parents can
+  # split the same plan path without colliding on each other's sub-issue.
+  # $plan is passed through --arg rather than interpolated into the jq
+  # program text, so a plan path containing a double-quote cannot break the
+  # filter or silently skip the cache write.
+  local cache_key existing
+  cache_key="$issue:$plan"
+  existing=""
+  if [ -f "$GHT_STATE" ]; then
+    existing=$(jq -r --arg k "$cache_key" '.splits[$k] // empty' "$GHT_STATE" 2>/dev/null || true)
+  fi
   if [ -n "$existing" ]; then
     printf '%s\n' "$existing"
     return 0
@@ -96,5 +106,9 @@ cmd_split() {
     [ -n "$parent_stage" ] && plan1_set "$issue" "$parent_stage"
   fi
 
-  state_set ".splits[\"$plan\"] = $number"
+  mkdir -p "$(dirname "$GHT_STATE")"
+  [ -f "$GHT_STATE" ] || printf '%s' '{}' >"$GHT_STATE"
+  local tmp="$GHT_STATE.tmp.$$"
+  jq --arg k "$cache_key" --argjson n "$number" '.splits[$k] = $n' "$GHT_STATE" >"$tmp" \
+    && mv "$tmp" "$GHT_STATE"
 }

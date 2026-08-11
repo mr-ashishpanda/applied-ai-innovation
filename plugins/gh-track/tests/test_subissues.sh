@@ -93,6 +93,17 @@ stub_expect 'issue view 2' 1
 assert_exit 1 rollup_apply 2 "5"
 assert_eq "0" "$(stub_call_count 'issue edit')" "no write attempted when parent labels unreadable"
 
+# --- rollup_apply: guard against unreadable CHILD labels ---------------------
+# If a CHILD's labels cannot be read, rollup_apply must return 1 and never
+# call stage_set on the parent -- a failed child read must never be treated
+# as an empty stage (which would silently floor/demote the parent while
+# still reporting success).
+stub_reset
+stub_expect_json 'issue view 2' '{"labels":[{"name":"plan1:done"}]}'
+stub_expect 'issue view 5' 1
+assert_exit 1 rollup_apply 2 "5"
+assert_eq "0" "$(stub_call_count 'issue edit')" "no write attempted when a child's labels are unreadable"
+
 # --- cmd_stage rollup routing (CLI level) ------------------------------------
 # Setting a CHILD's stage recomputes and writes the PARENT's rolled-up stage.
 stub_reset

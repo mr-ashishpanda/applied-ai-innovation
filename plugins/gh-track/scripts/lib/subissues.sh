@@ -76,7 +76,10 @@ rollup_stage_from_rank() {
 # write it with the ordinary stage_set (label + board, unchanged). CHILDREN
 # is a space-separated list of issue numbers, already resolved by the caller.
 # Best-effort: never dies. Returns 1 if unable to read the parent's current
-# labels (stage_set would need them), after which the whole write is skipped.
+# labels (stage_set would need them) OR any child's labels (a failed read
+# must never be silently treated as an empty/lowest-rank stage, which would
+# pull the parent's stage down while still reporting success) -- either way
+# the whole write is skipped.
 rollup_apply() {
   local parent=$1 children=$2 plan1 c min_rank cur_rank floor_rank target
 
@@ -91,8 +94,13 @@ rollup_apply() {
   [ -n "$plan1" ] || plan1=$(issue_stage "$parent")
   min_rank=$(rollup_stage_rank "$plan1")
 
+  local clabels
   for c in $children; do
-    cur_rank=$(rollup_stage_rank "$(issue_stage "$c")")
+    clabels=$(issue_labels "$c") || {
+      warn "cannot read labels for #$c; skipping rollup of #$parent"
+      return 1
+    }
+    cur_rank=$(rollup_stage_rank "$(printf '%s\n' "$clabels" | sed -n 's/^stage://p' | head -1)")
     [ "$cur_rank" -lt "$min_rank" ] && min_rank=$cur_rank
   done
 

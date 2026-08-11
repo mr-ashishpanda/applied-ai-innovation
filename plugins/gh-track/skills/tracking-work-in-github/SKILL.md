@@ -63,7 +63,8 @@ already would:
 - **Needs its own task breakdown, same spec** — write it as a new plan
   (`superpowers:writing-plans`, same issue). The very next plan checkpoint
   is now a *second* plan for this issue, which routes through `ghtrack
-  split` above automatically. No separate decision to make.
+  split` below (see Checkpoints) automatically. No separate decision to
+  make.
 - **A different problem entirely** — a new, independent issue per
   `references/intake.md`.
 
@@ -72,7 +73,8 @@ already would:
 **REQUIRED READ:** `references/issue-anatomy.md` for the body and comment
 templates. Use them as written — they are short by design.
 
-Six events, each with a fixed shape:
+Six core events, each with a fixed shape, plus the `split` variant of `plan`
+for a second-or-later plan on the same issue:
 
 | Event | When | Also do |
 |---|---|---|
