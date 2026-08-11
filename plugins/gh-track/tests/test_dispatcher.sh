@@ -33,6 +33,13 @@ if ! printf '%s' "$out" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
   fail "--version should print bare semver, got: $out"
 fi
 
+# GHTRACK_VERSION and plugin.json's "version" are two independent sources of
+# truth for the same number; nothing enforces they move together except this
+# check catching drift the moment either one changes.
+manifest_version=$(jq -r '.version' "$PLUGIN_DIR/.claude-plugin/plugin.json")
+assert_eq "$manifest_version" "$out" \
+  "plugin.json version matches ghtrack --version"
+
 # The stub records calls and is what `gh` resolves to inside tests.
 setup_scratch
 stub_reset

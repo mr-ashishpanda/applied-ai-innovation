@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Thin shim so `ghtrack` resolves on PATH once the plugin is installed.
+# Claude Code prepends every installed plugin's bin/ to PATH regardless of
+# whether a skill is active, whereas ${CLAUDE_PLUGIN_ROOT} is only set while
+# a skill or hook is running. Skills and hooks may still call the real
+# script under ${CLAUDE_PLUGIN_ROOT}/scripts/ghtrack directly; this shim is
+# what makes the CLAUDE.md rules and bare `ghtrack ...` calls work from
+# anywhere else.
+set -euo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec "$here/../scripts/ghtrack" "$@"

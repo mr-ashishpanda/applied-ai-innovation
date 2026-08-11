@@ -15,14 +15,15 @@ and no artifact is ever re-read for tracking's sake.
 
 ## Install
 
-Once per machine:
+Once per machine — no clone required, this pulls straight from GitHub:
 
 ```
 /plugin marketplace add mr-ashishpanda/applied-ai-innovation
-/plugin install gh-track
+/plugin install gh-track@applied-ai-innovation
 ```
 
-Once per project — in the repository you want tracked, ask Claude:
+Once per project — in the repository you want tracked, run `/gh-track:setup`
+or ask Claude:
 
 > set up GitHub tracking in this repo
 
@@ -40,6 +41,39 @@ gh auth refresh -s project
 
 Without it, tracking still works — labels remain canonical and you lose only the
 kanban view.
+
+## What gh-track writes
+
+Tracking work in GitHub means the plugin makes real writes on your behalf.
+Nothing here is hidden in scripts you'd have to read to find out:
+
+| Write | When |
+|---|---|
+| Labels (`stage:*`, `kind:*`, `size:*`, `blocked`) | `init`, once per repo |
+| A GitHub Project (v2) board | `init`, once per repo (needs the `project` scope) |
+| `.claude/gh-track/config.json` | `init` |
+| Your project's `CLAUDE.md` | `setting-up-github-tracking`, between marker comments |
+| Issues | `new`, one per tracked work item |
+| Issue comments | every checkpoint (`comment`) |
+| Issue bodies | `body --file`, `tasks`, `tick` |
+| `git push` of your current branch | `link`, at the spec and plan checkpoints |
+
+That last one is worth calling out on its own: posting a spec or plan
+checkpoint pushes your work branch to `origin` so the artifact link resolves.
+If you don't want that, don't run the `spec`/`plan` checkpoints on a branch
+you haven't already decided to push.
+
+## Slash commands
+
+| Command | Does |
+|---|---|
+| `/gh-track:setup` | Run the one-time repository setup (labels, board, config, `CLAUDE.md`) |
+| `/gh-track:status` | Read-only: `ghtrack doctor` plus this workspace's tracked issue |
+| `/gh-track:checkpoint <event>` | Post a checkpoint (`spec`, `plan`, `build-started`, `scope-change`, `blocked`, `done`, `repro`, `root-cause`) |
+
+Natural-language triggers work too — the skills fire on phrases like "set up
+GitHub tracking here" or "post the spec checkpoint" — the commands exist so
+you don't have to remember the phrasing.
 
 ## The `ghtrack` CLI
 
@@ -170,7 +204,14 @@ need the `project` OAuth scope: `gh auth refresh -s project`.
 
 `plugins/gh-track/.claude-plugin/plugin.json` and the repository-root
 `.claude-plugin/marketplace.json` make this plugin installable.
-`hooks/hooks.json` registers two hooks: `artifact-changed.sh` on
+`bin/ghtrack` is a thin shim to `scripts/ghtrack`: Claude Code prepends every
+installed plugin's `bin/` to `PATH` unconditionally, whereas
+`${CLAUDE_PLUGIN_ROOT}` is only set while a skill or hook is actually
+running — without this shim, the bare `ghtrack ...` calls in the skills and
+the `CLAUDE.md` block would not resolve outside of one. `commands/` holds
+`/gh-track:setup`, `/gh-track:status`, and `/gh-track:checkpoint`, each a
+thin pointer into the skills below — they exist for discoverability, not as
+a separate code path. `hooks/hooks.json` registers two hooks: `artifact-changed.sh` on
 `PostToolUse` (Write/Edit/NotebookEdit), which notices writes under
 `docs/superpowers/**` and reminds the agent to checkpoint the tracking issue,
 and `session-context.sh` on `SessionStart`, which resolves the current

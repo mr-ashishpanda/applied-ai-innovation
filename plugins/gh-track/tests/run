@@ -26,7 +26,7 @@ if command -v shellcheck >/dev/null 2>&1; then
   # silent quoting bug does the most damage (an unquoted `done` read as the
   # loop keyword turned an assertion into a no-op).
   if ! shellcheck -x ../scripts/ghtrack ../scripts/lib/*.sh ../hooks/*.sh \
-       test_*.sh stub/gh helpers.sh run; then
+       ../bin/ghtrack test_*.sh stub/gh helpers.sh run; then
     failed=$((failed + 1))
   fi
 else

@@ -8,20 +8,22 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/artifact-changed.sh\"",
             "shell": "bash",
-            "async": false
+            "async": false,
+            "timeout": 10
           }
         ]
       }
     ],
     "SessionStart": [
       {
-        "matcher": "startup|clear|compact",
+        "matcher": "startup|resume|clear|compact|fork",
         "hooks": [
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/session-context.sh\"",
             "shell": "bash",
-            "async": false
+            "async": false,
+            "timeout": 10
           }
         ]
       }
