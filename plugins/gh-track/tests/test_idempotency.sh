@@ -71,6 +71,22 @@ assert_contains "$second_edit" "--add-label stage:planned" "second run still add
 assert_not_contains "$second_edit" "--remove-label stage:planned" "second run does not remove the label it is setting"
 assert_not_contains "$second_edit" "--remove-label" "nothing to remove when the stage is unchanged"
 
+# size: setting the same size twice carries the add and no spurious removal
+# of the very label being set -- the same swap discipline as stage.
+stub_reset
+stub_expect_json 'issue view 42' '{"labels":[{"name":"size:m"},{"name":"stage:planned"}]}'
+stub_expect_json 'auth status' "Token scopes: 'repo', 'project'"
+stub_expect_json 'project view' '{"id":"PVT_i"}'
+stub_expect_json 'project field-list' \
+  '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]},{"id":"F_size","name":"Size","options":[{"id":"O_m","name":"M"}]}]}'
+stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_42","content":{"number":42}}]}'
+"$GHTRACK" size 42 m >/dev/null
+"$GHTRACK" size 42 m >/dev/null
+assert_eq "2" "$(stub_call_count 'issue edit 42')" "one edit per size run"
+second_edit=$(grep -F 'issue edit 42' "$GH_STUB_LOG" | sed -n 2p)
+assert_contains "$second_edit" "--add-label size:m" "second run still adds the size label"
+assert_not_contains "$second_edit" "--remove-label" "nothing to remove when the size is unchanged"
+
 # tick: ticking the same task twice yields identical bodies.
 #
 # `ghtrack tick` writes --body-file to a mktemp scratch dir that its own

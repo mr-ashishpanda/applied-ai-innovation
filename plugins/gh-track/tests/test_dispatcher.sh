@@ -10,7 +10,7 @@ assert_contains "$out" "usage: ghtrack" "usage banner on no args"
 # Every subcommand the dispatcher accepts must be documented in the usage
 # text. An undocumented subcommand is an unusable one: models read `ghtrack`
 # with no arguments to discover what exists.
-SUBCOMMANDS="doctor init new resolve show stage body comment link tasks tick"
+SUBCOMMANDS="doctor init new resolve show stage size body comment link tasks tick"
 for sub in $SUBCOMMANDS; do
   assert_contains "$out" "  $sub" "usage lists $sub"
 done

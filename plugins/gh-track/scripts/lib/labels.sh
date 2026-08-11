@@ -21,6 +21,13 @@ kind_valid() {
   esac
 }
 
+size_valid() {
+  case " $GHT_SIZES " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 stage_to_status() {
   case $1 in
     backlog) printf 'Backlog' ;;
@@ -29,6 +36,20 @@ stage_to_status() {
     review) printf 'Review' ;;
     done) printf 'Done' ;;
     *) die "unknown stage: $1" 2 ;;
+  esac
+}
+
+# size_to_field SIZE — the board's Size option name for a size:* label.
+#
+# A literal table rather than an upcasing trick: bash 3.2 has no
+# case-converting parameter expansion, and the board's option names are the
+# project's to choose, not a mechanical transform of the label.
+size_to_field() {
+  case $1 in
+    s) printf 'S' ;;
+    m) printf 'M' ;;
+    l) printf 'L' ;;
+    *) die "unknown size: $1" 2 ;;
   esac
 }
 
@@ -113,5 +134,36 @@ stage_set() {
   if [ -n "$(cfg .project)" ] && type board_status_set >/dev/null 2>&1; then
     board_status_set "$issue" "$(stage_to_status "$want")" || \
       warn "board Status not updated; labels are still correct"
+  fi
+}
+
+# size_set N SIZE — swap the size label in one edit, then mirror the board.
+#
+# Size is set at the plan checkpoint, not at intake, so this has to work on
+# an issue that already exists and may already carry a different size. Same
+# discipline as stage_set: one edit, only size:* touched, and a read failure
+# refuses the write rather than turning the SWAP into an ADD.
+size_set() {
+  local issue=$1 want=$2
+  size_valid "$want" || die "unknown size: $want (one of: $GHT_SIZES)" 2
+
+  local args="" s current
+  current=$(issue_labels "$issue") \
+    || die "cannot read current labels for issue #$issue; refusing to change size (no write performed)" 6
+  for s in $GHT_SIZES; do
+    if [ "$s" != "$want" ] && printf '%s\n' "$current" | grep -qx "size:$s"; then
+      args="$args --remove-label size:$s"
+    fi
+  done
+
+  # shellcheck disable=SC2086 # args is a deliberately word-split flag list
+  gh issue edit "$issue" --repo "$GHT_SLUG" \
+    --add-label "size:$want" $args >/dev/null
+
+  # The size:* label and the board's Size field are written together, and
+  # the label is the one that counts: a board failure is a warning.
+  if [ -n "$(cfg .project)" ] && type board_size_set >/dev/null 2>&1; then
+    board_size_set "$issue" "$(size_to_field "$want")" || \
+      warn "board Size not updated; labels are still correct"
   fi
 }

@@ -23,6 +23,7 @@ usage: ghtrack <subcommand> [options]
   resolve                             print the issue number for this branch
   show N                              print issue state as key=value lines
   stage N STAGE                       swap stage label, mirror board Status
+  size N s|m|l                        swap size label, mirror board Size
   body N --file F                     replace the issue body
   comment N --event E --file F        post or edit a marked comment
   link N --kind spec|plan --path P     push branch, print artifact URLs
@@ -45,7 +46,7 @@ main() {
   shift
 
   case $sub in
-    doctor|init|new|resolve|show|stage|body|comment|link|tasks|tick)
+    doctor|init|new|resolve|show|stage|size|body|comment|link|tasks|tick)
       # shellcheck source=/dev/null
       . "$GHT_LIB/cmd_$sub.sh"
       "cmd_$sub" "$@"

@@ -6,6 +6,8 @@
 . "$GHT_LIB/config.sh"
 # shellcheck source=SCRIPTDIR/labels.sh
 . "$GHT_LIB/labels.sh"
+# shellcheck source=SCRIPTDIR/board.sh
+. "$GHT_LIB/board.sh"
 
 cmd_new() {
   cfg_load
@@ -44,5 +46,26 @@ cmd_new() {
       --body "Captured by gh-track. No spec yet." $args)
   fi
 
-  printf '%s\n' "${url##*/}"
+  local number=${url##*/}
+
+  # Print the number BEFORE touching the board. The issue exists either way,
+  # and the number is this command's entire contract with its caller; a board
+  # that is unreachable, unconfigured or out of scope must cost the kanban
+  # card and nothing else. Status is set to Backlog to match the
+  # stage:backlog label the issue was just created with, so the card lands in
+  # the right column rather than the board's default -- capture-only intake
+  # items are branchless and may never see a `stage` transition to place them.
+  printf '%s\n' "$number"
+
+  if [ -n "$(cfg .project)" ] && type board_status_set >/dev/null 2>&1; then
+    board_status_set "$number" Backlog || \
+      warn "issue #$number created but not added to the board; labels are still correct"
+    # The size:* label and the board's Size field are written together, here
+    # as in `size`. Sizing at intake is unusual (it belongs to the plan
+    # checkpoint) but --size exists, so it must not leave the two disagreeing.
+    if [ -n "$size" ]; then
+      board_size_set "$number" "$(size_to_field "$size")" || \
+        warn "board Size not updated for #$number; labels are still correct"
+    fi
+  fi
 }

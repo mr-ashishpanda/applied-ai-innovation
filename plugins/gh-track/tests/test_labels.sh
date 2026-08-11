@@ -75,6 +75,61 @@ assert_exit 0 stage_set 42 review
 assert_contains "$(stub_calls)" "--add-label stage:review" "unlabelled issue still gets its stage"
 assert_not_contains "$(stub_calls)" "--remove-label" "nothing to remove from an unlabelled issue"
 
+# --- size (A2) -------------------------------------------------------------
+# Size is set at the plan checkpoint, not at intake, so it has to work on an
+# issue that already exists and may already carry a different size.
+assert_exit 0 size_valid s
+assert_exit 0 size_valid l
+assert_exit 1 size_valid xl
+assert_eq "S" "$(size_to_field s)" "s -> S board option"
+assert_eq "M" "$(size_to_field m)" "m -> M board option"
+assert_eq "L" "$(size_to_field l)" "l -> L board option"
+
+# size_set swaps in ONE edit: other size:* labels removed, stage/kind untouched.
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"labels":[{"name":"size:s"},{"name":"stage:planned"},{"name":"kind:feature"}]}'
+size_set 42 l
+calls=$(stub_calls)
+assert_contains "$calls" "--add-label size:l" "adds the new size"
+assert_contains "$calls" "--remove-label size:s" "removes the old size"
+assert_not_contains "$calls" "--remove-label stage:planned" "leaves the stage label alone"
+assert_not_contains "$calls" "--remove-label kind:feature" "leaves the kind label alone"
+assert_eq "1" "$(stub_call_count 'issue edit 42')" "single edit call"
+
+# Setting the size an issue already has is a successful no-op.
+stub_reset
+stub_expect_json 'issue view 42' '{"labels":[{"name":"size:m"}]}'
+assert_exit 0 size_set 42 m
+assert_not_contains "$(stub_calls)" "--remove-label" "nothing to remove when the size is unchanged"
+
+# C1 discipline: the read that shapes the --remove-label list must be able to
+# say "I failed". An empty answer would turn the SWAP into an ADD and leave
+# the issue carrying TWO size:* labels while the command printed success.
+stub_reset
+stub_expect 'issue view 42' 1
+assert_exit 6 size_set 42 m
+assert_eq "0" "$(stub_call_count 'issue edit')" "no partial edit on a failed read"
+
+# An issue with genuinely no labels is still a successful read.
+stub_reset
+stub_expect_json 'issue view 42' '{"labels":[]}'
+assert_exit 0 size_set 42 s
+assert_contains "$(stub_calls)" "--add-label size:s" "unlabelled issue still gets its size"
+
+# The subcommand: valid run, bad size, non-numeric issue number.
+stub_reset
+stub_expect_json 'issue view 42' '{"labels":[{"name":"size:s"}]}'
+out=$("$GHTRACK" size 42 m)
+assert_eq "size set: #42 -> m" "$out" "size prints a one-line confirmation"
+assert_contains "$(stub_calls)" "--add-label size:m" "size subcommand edits the label"
+
+stub_reset
+assert_exit 2 "$GHTRACK" size 42 xl
+assert_exit 2 "$GHTRACK" size 42
+assert_exit 2 "$GHTRACK" size notanumber m
+assert_eq "0" "$(stub_call_count 'issue edit')" "no write on a bad size argument"
+
 # issue_stage reads the current stage.
 stub_reset
 stub_expect_json 'issue view 42' '{"labels":[{"name":"stage:building"},{"name":"size:m"}]}'
@@ -88,6 +143,9 @@ assert_eq "77" "$out" "new prints the issue number"
 calls=$(stub_calls)
 assert_contains "$calls" "--label stage:backlog" "created at backlog"
 assert_contains "$calls" "--label kind:feature" "kind label applied"
+# A1: with no project configured, running label-only is a chosen setup, not a
+# failure -- `new` must not reach for a board that was never set up.
+assert_eq "0" "$(stub_call_count 'project ')" "no board calls when no project is configured"
 
 # An invalid kind is rejected before any write.
 stub_reset

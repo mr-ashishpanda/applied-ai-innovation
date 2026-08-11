@@ -22,10 +22,11 @@ idempotent, and testable without a model.
 |---|---|
 | `doctor` | Check gh, auth, scopes, config, board, artifact conventions. Never mutates. |
 | `init` | Create labels and the board, write config, gitignore state. Idempotent. |
-| `new --kind K --title T` | Create an issue at `stage:backlog`; prints the number. |
+| `new --kind K --title T [--size S] [--body-file F]` | Create an issue at `stage:backlog`, add it to the board; prints the number. |
 | `resolve` | Print this branch's issue number. `--set N` records one manually. |
 | `show N` | Issue state as compact `key=value` lines. |
 | `stage N STAGE` | Swap the stage label, mirror board Status. |
+| `size N s\|m\|l` | Swap the size label, mirror the board's Size field. Set at the plan checkpoint. |
 | `body N --file F` | Replace the issue body. |
 | `comment N --event E --file F` | Post or edit a marked checkpoint comment. |
 | `link N --kind spec\|plan --path P` | Push the branch, print artifact URLs. |
@@ -48,7 +49,7 @@ idempotent, and testable without a model.
 - **Branch names carry the issue number** (`<issue>-<slug>`), so any session
   resolves its context from `git branch --show-current`.
 - **Every mutating subcommand is idempotent.** Re-running `tasks`, `tick`,
-  `stage`, or `comment` with the same inputs edits in place rather than
+  `stage`, `size`, or `comment` with the same inputs edits in place rather than
   creating a duplicate — proved in `tests/test_idempotency.sh`, not just
   claimed.
 
@@ -84,17 +85,24 @@ break every call site, including the plugin's hook scripts.
 `doctor`, `init`. One per line, values unquoted and possibly empty. This is
 the machine-readable surface; parse these.
 
-**Mutating commands print a one-line human confirmation** — `stage`, `body`,
-`comment`, `tasks`, `tick`. Do not parse the prose; read state back with
-`show`.
+**Mutating commands print a one-line human confirmation** — `stage`, `size`,
+`body`, `comment`, `tasks`, `tick`. Do not parse the prose; read state back
+with `show`.
 
 ### Known limitations
 
 - Blob URLs take their host from `origin`'s URL (falling back to
   `github.com`), so GitHub Enterprise Server works, but a repository with no
   `origin` remote on a GHES install would get `github.com` links.
-- `link_default_url` (rewriting body links to the default branch once work
-  merges) has no caller yet, so body links continue to point at the branch.
+- `board_ids` caches field ids in `state.json` and short-circuits on the
+  Status ids alone, so a board that gains its `Size` field *after* the cache
+  was written keeps warning `project has no Size field` on every `size` run.
+  Remedy: `rm .claude/gh-track/state.json` (it is gitignored scratch) and the
+  next command re-reads the board's fields.
+- `link` emits `default_url=` (the default-branch URL that survives the work
+  branch being deleted on merge), but nothing rewrites an issue body to use
+  it yet — that is the Done checkpoint's job, and it belongs to the
+  lifecycle skill in a later plan.
 
 ## Running the tests
 

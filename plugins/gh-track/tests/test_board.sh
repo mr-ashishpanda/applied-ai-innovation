@@ -107,6 +107,59 @@ stub_expect_json 'project item-add' '{"id":"PVTI_below_cap"}'
 assert_exit 0 board_status_set 42 Doing
 assert_contains "$(stub_calls)" "item-add" "below cap: absent issue still added"
 
+# --- new adds the issue to the board (A1) ----------------------------------
+# `new` used to create the issue and stop there, so every issue was invisible
+# on the kanban until its first `stage` transition -- and capture-only intake
+# items are branchless and may never get one, so they never appeared at all.
+stub_reset
+stub_expect_json 'issue create' 'https://github.com/me/proj/issues/77'
+stub_expect_json 'project item-list' '{"items":[]}'
+stub_expect_json 'project item-add' '{"id":"PVTI_77"}'
+out=$("$GHTRACK" new --kind feature --title "Add a thing")
+assert_eq "77" "$out" "new still prints only the issue number"
+calls=$(stub_calls)
+assert_contains "$calls" "item-add" "new adds the new issue to the board"
+assert_contains "$calls" "/issues/77" "the card points at the issue just created"
+assert_contains "$calls" "O_backlog" "the card lands in Backlog, matching stage:backlog"
+
+# A board failure must NOT fail `new`: the issue already exists and its
+# number is the command's entire contract. The board is a mirror.
+stub_reset
+stub_expect_json 'issue create' 'https://github.com/me/proj/issues/78'
+stub_expect 'project item-list' 1
+set +e
+out=$("$GHTRACK" new --kind bug --title "b" 2>/dev/null)
+rc=$?
+set -e
+assert_eq "0" "$rc" "a board failure does not fail new"
+assert_eq "78" "$out" "the issue number is still printed when the board fails"
+
+# --size at intake writes the label and the board's Size field together.
+stub_reset
+stub_expect_json 'issue create' 'https://github.com/me/proj/issues/79'
+stub_expect_json 'project item-list' '{"items":[]}'
+stub_expect_json 'project item-add' '{"id":"PVTI_79"}'
+"$GHTRACK" new --kind chore --title c --size l >/dev/null
+calls=$(stub_calls)
+assert_contains "$calls" "--label size:l" "the size label is applied at creation"
+assert_contains "$calls" "O_l" "the board Size field is written with it"
+
+# --- size mirrors the board's Size field (A2) ------------------------------
+stub_reset
+stub_expect_json 'issue view 55' '{"labels":[{"name":"size:s"}]}'
+stub_expect_json 'project item-list' '{"items":[{"id":"PVTI_55","content":{"number":55}}]}'
+"$GHTRACK" size 55 m >/dev/null
+calls=$(stub_calls)
+assert_contains "$calls" "item-edit" "size edits the board field"
+assert_contains "$calls" "F_size" "size targets the Size field, not Status"
+assert_contains "$calls" "O_m" "size uses the M option id for size:m"
+
+# ...and a board failure is a warning there too: the label is what counts.
+stub_reset
+stub_expect_json 'issue view 55' '{"labels":[]}'
+stub_expect 'project item-list' 1
+assert_exit 0 "$GHTRACK" size 55 l
+
 # --- init ------------------------------------------------------------------
 # T6: tear the first scratch repo down before building another, or each run
 # leaks one and ORIG_PWD is clobbered to the first scratch path so teardown
