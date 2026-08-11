@@ -102,7 +102,7 @@ link_urls() {
 # link_default_url PATH — url on the default branch, for the Done rewrite.
 link_default_url() {
   local base
-  base=$(gh repo view --repo "$GHT_SLUG" --json defaultBranchRef \
+  base=$(gh repo view "$GHT_SLUG" --json defaultBranchRef \
     --jq .defaultBranchRef.name 2>/dev/null || true)
   [ -n "$base" ] || base=main
   link_blob_url "$base" "$1"

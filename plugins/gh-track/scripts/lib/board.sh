@@ -186,6 +186,58 @@ board_size_set() {
   return 0
 }
 
+# board_status_color STATUS — a fixed, purely cosmetic color per column.
+board_status_color() {
+  case $1 in
+    Backlog) printf 'GRAY' ;;
+    Todo) printf 'BLUE' ;;
+    Doing) printf 'YELLOW' ;;
+    Review) printf 'ORANGE' ;;
+    Done) printf 'GREEN' ;;
+    *) printf 'GRAY' ;;
+  esac
+}
+
+# board_align_new_project_status PROJ OWNER — rewrite the Status field's
+# options to exactly BOARD_STATUSES.
+#
+# `gh project create` only ever creates GitHub's own defaults (Todo, In
+# Progress, Done), which don't match BOARD_STATUSES (Backlog, Todo, Doing,
+# Review, Done) -- so board_status_set warns "no 'Backlog' Status option"
+# on the very first ghtrack new against a fresh board, forever, since
+# board_ids caches whatever options it finds on first read. This runs ONCE,
+# only on a project THIS call just created (never against a pre-existing,
+# possibly user-curated board -- the board is a mirror we own only at
+# creation time), before board_ids caches anything.
+board_align_new_project_status() {
+  local proj=$1 owner=$2 statusname fields sfid
+  statusname=$(cfg .board.statusField)
+
+  fields=$(gh project field-list "$proj" --owner "$owner" --format json 2>/dev/null || true)
+  [ -n "$fields" ] || { warn "cannot list fields for project $proj; Status options left at GitHub's defaults"; return 1; }
+
+  sfid=$(printf '%s' "$fields" | jq -r --arg n "$statusname" \
+    '.fields[] | select(.name == $n) | .id // empty' 2>/dev/null)
+  [ -n "$sfid" ] || { warn "project $proj has no '$statusname' field; Status options left at GitHub's defaults"; return 1; }
+
+  local opts s color first=1
+  opts=""
+  for s in $BOARD_STATUSES; do
+    color=$(board_status_color "$s")
+    if [ "$first" = 1 ]; then first=0; else opts="$opts, "; fi
+    opts="$opts{name: \"$s\", color: $color, description: \"\"}"
+  done
+
+  gh api graphql -f query="
+    mutation {
+      updateProjectV2Field(input: {fieldId: \"$sfid\", singleSelectOptions: [$opts]}) {
+        clientMutationId
+      }
+    }" >/dev/null 2>&1 \
+    || { warn "cannot rewrite Status options for project $proj; left at GitHub's defaults"; return 1; }
+  return 0
+}
+
 # board_ensure — find or create the repo's board, then cache its ids.
 board_ensure() {
   board_has_scope || {
@@ -221,6 +273,7 @@ board_ensure() {
       proj=$(gh project create --owner "$owner" --title "$title" \
         --format json --jq .number 2>/dev/null || true)
       [ -n "$proj" ] || { warn "cannot create project '$title'"; return 1; }
+      board_align_new_project_status "$proj" "$owner" || true
     fi
     cfg_write ".project = $proj"
   fi

@@ -41,6 +41,18 @@ assert_contains "$(cat merged.md)" "- [x] 1. First thing" "tick 1 preserved"
 assert_contains "$(cat merged.md)" "- [x] 2. Second thing" "tick 2 preserved"
 assert_contains "$(cat merged.md)" "- [ ] 4. Fourth thing" "new task unticked"
 
+# I2 regression: the very first sync for an issue has no existing checklist,
+# so OLD is a genuinely empty file (0 bytes) -- not merely a file with no
+# ticked lines. The classic `FNR == NR { ...; next }` two-file awk idiom
+# breaks in exactly this case: with zero lines ever read from OLD, NR and
+# FNR track NEW's lines in lockstep from record 1, so `FNR == NR` holds for
+# every line of NEW too, and the whole checklist silently comes out empty
+# (0/0) instead of erroring or reporting NEW's tasks unticked.
+: >empty-old.md
+tasks_merge empty-old.md lines.md >merged-first.md
+assert_eq "$(cat lines.md)" "$(cat merged-first.md)" \
+  "first sync (empty OLD) returns NEW's tasks verbatim, not an empty result"
+
 # A retitled task keeps its tick and takes the new title.
 printf -- '- [x] 1. Old title\n' >old2.md
 tasks_merge old2.md lines.md >merged2.md
@@ -80,6 +92,19 @@ stub_reset
 stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n\n## Tasks (from plan - 1/2)\n- [x] 1. First thing\n- [ ] 2. old\n"}'
 ght tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
 assert_eq "1" "$(stub_call_count 'issue edit 42')" "exactly one body edit"
+
+# End to end, first sync: an issue body with NO "## Tasks" section at all
+# (the real state of a brand-new issue) must produce the full checklist,
+# not a silent 0/0 -- this is the CLI-level version of the I2 regression
+# above, reproduced through cmd_tasks exactly as it ran live against a real
+# throwaway repo.
+stub_reset
+stub_expect_json 'issue view 42' '{"body":"## Goal\nG\n"}'
+ght tasks 42 --plan "$TESTS_DIR/fixtures/plan-sample.md" >/dev/null
+sent=$(cat "${GH_STUB_LOG}.body")
+assert_contains "$sent" "## Tasks (from plan - 0/4)" "first sync reports the real total, not 0/0"
+assert_contains "$sent" "- [ ] 1. First thing" "first sync includes every extracted task"
+assert_contains "$sent" "- [ ] 4. Fourth thing" "first sync includes the last extracted task"
 
 # A body saved by GitHub's web form arrives with CRLF. body_get is the single
 # point every body read passes through, so the CR is stripped there: left in,

@@ -250,6 +250,7 @@ stub_expect_json 'project create' '{"number":9,"id":"PVT_new"}'
 stub_expect_json 'project view' '{"id":"PVT_new"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
+stub_expect 'graphql' 0
 out=$(ght init)
 assert_contains "$(stub_calls)" "label create stage:backlog" "init creates labels"
 assert_contains "$(stub_calls)" "project create" "init creates the board"
@@ -260,6 +261,56 @@ assert_contains "$out" "init=complete" "init reports completion"
 assert_eq "PVT_new" "$(state_get '.board.projectId')" "init caches the project id"
 assert_eq "F_status" "$(state_get '.board.statusFieldId')" "init caches the status field id"
 assert_eq "O_todo" "$(state_get '.board.statusOptions.Todo')" "init caches the status options"
+assert_contains "$(stub_calls)" "graphql" "init aligns the new project's Status options"
+assert_contains "$(stub_calls)" "updateProjectV2Field" "alignment uses updateProjectV2Field"
+assert_contains "$(stub_calls)" "F_status" "alignment targets the real Status field id"
+assert_contains "$(stub_calls)" "Backlog" "alignment writes the Backlog option"
+assert_contains "$(stub_calls)" "Doing" "alignment writes the Doing option"
+assert_contains "$(stub_calls)" "Review" "alignment writes the Review option"
+
+# I2 regression: `gh project create` only ever creates GitHub's own default
+# Status options (Todo, In Progress, Done), which don't match BOARD_STATUSES.
+# Without alignment, board_status_set warns "no 'Backlog' Status option" on
+# the very first `ghtrack new` against a fresh board, forever -- board_ids
+# caches whatever wrong options field-list returns on the first read. This
+# proves the alignment call happens BEFORE board_ids caches, so the very
+# next board_ids call (via board_status_set) sees the aligned options.
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+rm -f .claude/gh-track/state.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'project'"
+stub_expect_json 'repo view' '{"nameWithOwner":"me/proj"}'
+stub_expect_json 'project list' '{"projects":[]}'
+stub_expect_json 'project create' '{"number":9,"id":"PVT_new"}'
+stub_expect_json 'project view' '{"id":"PVT_new"}'
+stub_expect_json 'project field-list' \
+  '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_backlog","name":"Backlog"},{"id":"O_todo","name":"Todo"},{"id":"O_doing","name":"Doing"},{"id":"O_review","name":"Review"},{"id":"O_done","name":"Done"}]}]}'
+stub_expect 'graphql' 0
+board_ensure
+assert_eq "O_backlog" "$(state_get '.board.statusOptions.Backlog')" \
+  "the freshly aligned Backlog option is cached, not just Todo"
+
+# alignment failure degrades (returns 1, warns) but never blocks board
+# creation -- the board is still usable with whatever options GitHub gave it.
+printf '%s' '{"repo":"me/proj"}' >.claude/gh-track/config.json
+rm -f .claude/gh-track/state.json
+stub_reset
+stub_expect_json 'auth status' "Token scopes: 'project'"
+stub_expect_json 'repo view' '{"nameWithOwner":"me/proj"}'
+stub_expect_json 'project list' '{"projects":[]}'
+stub_expect_json 'project create' '{"number":9,"id":"PVT_new"}'
+stub_expect_json 'project view' '{"id":"PVT_new"}'
+stub_expect_json 'project field-list' \
+  '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
+stub_expect 'graphql' 1
+err=$(board_ensure 2>&1) && rc=0 || rc=$?
+assert_eq "0" "$rc" "a failed Status alignment still lets board_ensure succeed"
+assert_contains "$err" "cannot rewrite Status options" "the alignment failure is reported"
+
+# Restore the config/state this section's later assertions expect.
+printf '%s' '{"repo":"me/proj","project":9}' >.claude/gh-track/config.json
+printf '%s' '{"board":{"projectId":"PVT_new","statusFieldId":"F_status","statusOptions":{"Todo":"O_todo"}}}' \
+  >.claude/gh-track/state.json
 
 # init twice does not create a second project.
 stub_reset
@@ -355,6 +406,7 @@ stub_expect_json 'project create' '{"number":12,"id":"PVT_ok"}'
 stub_expect_json 'project view' '{"id":"PVT_ok"}'
 stub_expect_json 'project field-list' \
   '{"fields":[{"id":"F_status","name":"Status","options":[{"id":"O_todo","name":"Todo"}]}]}'
+stub_expect 'graphql' 0
 out=$(ght init 2>&1)
 assert_eq "1" "$(stub_call_count 'project create')" "an empty list still creates the board"
 assert_eq "12" "$(jq -r .project .claude/gh-track/config.json)" "the new project is recorded"

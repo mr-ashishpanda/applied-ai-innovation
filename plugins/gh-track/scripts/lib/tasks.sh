@@ -28,6 +28,20 @@ tasks_extract() {
 # tasks_merge OLD NEW — NEW's titles and ordering win; OLD's ticks survive.
 tasks_merge() {
   local old=$1 new=$2
+
+  # The classic `FNR == NR { ...; next }` two-file idiom breaks when OLD has
+  # zero lines (true on every issue's FIRST tasks sync, since there is no
+  # existing checklist yet): with nothing ever read from OLD, NR and FNR
+  # track NEW's lines in lockstep from record 1, so FNR == NR is true for
+  # EVERY line of NEW too -- the `next` meant for OLD's lines fires on all
+  # of NEW's instead, and the whole checklist comes out empty (0/0), exit 0,
+  # no error. This is not one awk's quirk; it's inherent to the idiom.
+  # There is nothing to merge from an empty OLD, so skip the awk entirely.
+  if [ ! -s "$old" ]; then
+    cat "$new"
+    return 0
+  fi
+
   awk '
     FNR == NR {
       if ($0 ~ /^- \[x\] /) {
