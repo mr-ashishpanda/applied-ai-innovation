@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin shim so `ssm-status` resolves on PATH once the plugin is installed.
+# See bin/ssm-connect for why this exists.
+set -euo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec "$here/../skills/ssm-ssh-access/scripts/status.sh" "$@"

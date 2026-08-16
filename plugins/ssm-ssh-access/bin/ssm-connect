@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Thin shim so `ssm-connect` resolves on PATH once the plugin is installed.
+# Claude Code prepends every installed plugin's bin/ to PATH regardless of
+# whether a skill is active, whereas ${CLAUDE_PLUGIN_ROOT} is only set while
+# a skill or hook is running. The skill itself still calls the real script
+# by its own relative path; this shim is what makes bare `ssm-connect ...`
+# calls work from anywhere else, including a plain terminal.
+set -euo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec "$here/../skills/ssm-ssh-access/scripts/connect.sh" "$@"
