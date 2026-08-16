@@ -13,6 +13,14 @@
       "category": "workflow",
       "source": "./plugins/gh-track",
       "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/gh-track"
+    },
+    {
+      "name": "ssm-ssh-access",
+      "description": "SSH/SCP into private AWS EC2 instances by instance ID over SSM Session Manager - no bastion, no open port 22, no VPN.",
+      "author": { "name": "Ashish Panda" },
+      "category": "devops",
+      "source": "./plugins/ssm-ssh-access",
+      "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/ssm-ssh-access"
     }
   ]
 }

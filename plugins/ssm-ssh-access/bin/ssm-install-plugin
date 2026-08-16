@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Thin shim so `ssm-install-plugin` resolves on PATH once the plugin is
+# installed. Installs AWS's `session-manager-plugin` binary (the prerequisite
+# for everything else here) - not a Claude Code plugin.
+# See bin/ssm-connect for why this exists.
+set -euo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec "$here/../skills/ssm-ssh-access/scripts/install-plugin.sh" "$@"

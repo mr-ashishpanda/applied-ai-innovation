@@ -1,0 +1,12 @@
+{
+  "name": "ssm-ssh-access",
+  "description": "SSH/SCP into a private AWS EC2 instance by instance ID over SSM Session Manager - no bastion, no open port 22, no VPN. Pushes a temporary SSH key, wires `ssh <instance-id>` to work directly, and revokes the key afterward.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ashish Panda"
+  },
+  "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/ssm-ssh-access",
+  "repository": "https://github.com/mr-ashishpanda/applied-ai-innovation",
+  "license": "MIT",
+  "keywords": ["aws", "ssm", "ssh", "scp", "ec2", "session-manager", "bastion"]
+}
