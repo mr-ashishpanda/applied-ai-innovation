@@ -21,6 +21,10 @@ cmd_resolve() {
     printf '%s\n' "$2"
     return 0
   fi
+  if [ "${1:-}" = "--clear" ]; then
+    resolve_forget
+    return 0
+  fi
   # resolve_issue dies with exit 3 when nothing resolves. Assign FIRST, then
   # print: interpolating $(resolve_issue) straight into printf would confine
   # that `exit` to the substitution subshell, so printf would still run and

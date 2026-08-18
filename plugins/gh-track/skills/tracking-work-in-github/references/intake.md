@@ -50,3 +50,46 @@ absorbs the change or defers it.
 A bug found in already-shipped, closed work is always a **new** issue with
 `kind:bug`, cross-linked `Regressed from #N`. Never reopen the original: it is
 an accurate record of what shipped, and rewriting it destroys that.
+
+## Deferred findings become their own issue, immediately
+
+A task-level or whole-branch review sometimes produces a finding that is
+real and understood, but deliberately NOT fixed now — too large, wrong
+scope, needs its own design pass. The moment that ruling is made, create a
+tracked issue for it (`ghtrack new`) in the SAME turn — do not wait for the
+closing checkpoint, and do not settle for writing it into the current
+issue's `## Decisions` line as the only record. A closed issue's history is
+not something anyone reads before starting unrelated future work, so a
+finding that lives only there is functionally forgotten the moment the
+issue closes.
+
+If another already-tracked issue depends on the deferred finding — its own
+author needs to know about it before they start — add an explicit
+reference in *that issue's own body* too, not only a link back from the new
+issue. One-directional linking ("the new issue mentions what spawned it")
+is not enough; the dependent issue has to carry the pointer itself, since
+that is the issue whoever picks it up will actually be reading.
+
+This was learned the concrete way: a whole-branch review surfaced two real
+architectural gaps, both recorded only in the closing issue's `## Decisions`
+line and in code comments. Neither got a tracked issue until asked for
+directly, and a downstream issue that genuinely depended on one of them had
+no reference to it at all — its future author would have had no way to
+find it short of searching.
+
+## Issues under an existing epic use `ghtrack new --epic E`
+
+If a new issue is a child of an existing "Epic N: ..." tracking issue,
+create it with `ghtrack new --kind K --title T --epic E`, not plain
+`ghtrack new`. The `--epic` flag numbers the title `N.<next>` (matching the
+convention already visible on sibling children), writes an `**Epic:** #E`
+header into the body, and links the new issue as `E`'s GitHub-native
+sub-issue — one command instead of four manual steps that are each easy to
+skip under time pressure.
+
+This is not merely a formatting nicety: an epic's own "Children" list may be
+hand-maintained prose with zero structural backing (verified in one repo —
+an epic listing seven children as prose had ZERO native sub-issues linked),
+which means nothing but memory enforces that a new child gets recorded
+consistently. `--epic` fixes the structure at creation time instead of
+requiring a later retrofit.

@@ -60,6 +60,16 @@ they do live and set `specGlob` and `planGlob` in
 `.claude/gh-track/config.json` accordingly. This is the designed adaptation
 point for superpowers convention changes; do not edit skill files instead.
 
+If the repo has more than one long-lived integration branch (e.g. `main` is
+frozen and a `v2` branch is where active work actually lands), ask and set
+`sharedBranches` in `.claude/gh-track/config.json` — an array including every
+such branch, e.g. `["main", "v2"]`. `resolve` never uses its recorded-state
+fallback on a shared branch, and `resolve --set` refuses to record one there,
+precisely because a shared branch's checked-out content changes constantly as
+unrelated work merges into it — a path-keyed pin recorded there once would
+misattribute every future session that starts on it before a dedicated
+per-task worktree exists. Defaults to `["main", "master"]` when unset.
+
 ## Do not
 
 - Do not create issues here. This skill only prepares the repository.

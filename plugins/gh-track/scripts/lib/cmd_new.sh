@@ -8,23 +8,31 @@
 . "$GHT_LIB/labels.sh"
 # shellcheck source=SCRIPTDIR/board.sh
 . "$GHT_LIB/board.sh"
+# shellcheck source=SCRIPTDIR/epic.sh
+. "$GHT_LIB/epic.sh"
+# shellcheck source=SCRIPTDIR/subissues.sh
+. "$GHT_LIB/subissues.sh"
 
 cmd_new() {
   cfg_load
   slug_require
-  local kind="" title="" bodyfile="" size=""
+  local kind="" title="" bodyfile="" size="" epic=""
   while [ $# -gt 0 ]; do
     case $1 in
       --kind) kind=${2:-}; shift 2 ;;
       --title) title=${2:-}; shift 2 ;;
       --body-file) bodyfile=${2:-}; shift 2 ;;
       --size) size=${2:-}; shift 2 ;;
+      --epic) epic=${2:-}; shift 2 ;;
       *) die "new: unexpected argument: $1" 2 ;;
     esac
   done
   [ -n "$kind" ] || die "new requires --kind feature|bug|chore" 2
   kind_valid "$kind" || die "new --kind must be one of: $GHT_KINDS" 2
   [ -n "$title" ] || die "new requires --title TITLE" 2
+  if [ -n "$epic" ]; then
+    require_number "$epic" "new --epic issue number"
+  fi
 
   local args="--label stage:backlog --label kind:$kind"
   if [ -n "$size" ]; then
@@ -34,16 +42,43 @@ cmd_new() {
     esac
   fi
 
+  # --epic renumbers the title to "<epic-num>.<next> <title>" (matching the
+  # convention already in use for this repo's build issues) and prepends an
+  # Epic header line to the body -- both BEFORE issue creation, so a failed
+  # epic lookup refuses the whole write rather than creating an unlinked,
+  # unnumbered issue that then needs to be fixed by hand.
+  local header=""
+  if [ -n "$epic" ]; then
+    local epicnum next
+    epicnum=$(epic_short_number "$epic")
+    next=$(epic_next_child_number "$epicnum")
+    title="$epicnum.$next $title"
+    header="**Stage:** backlog · **Kind:** $kind · **Epic:** #$epic"
+  fi
+
   local url
   if [ -n "$bodyfile" ]; then
     [ -f "$bodyfile" ] || die "no such file: $bodyfile" 2
-    # shellcheck disable=SC2086 # args is a deliberately word-split flag list
-    url=$(gh issue create --repo "$GHT_SLUG" --title "$title" \
-      --body-file "$bodyfile" $args)
+    if [ -n "$header" ]; then
+      local tmp="$bodyfile.epic.$$"
+      { printf '%s\n\n' "$header"; cat "$bodyfile"; } >"$tmp"
+      # shellcheck disable=SC2086 # args is a deliberately word-split flag list
+      url=$(gh issue create --repo "$GHT_SLUG" --title "$title" \
+        --body-file "$tmp" $args)
+      rm -f "$tmp"
+    else
+      # shellcheck disable=SC2086 # args is a deliberately word-split flag list
+      url=$(gh issue create --repo "$GHT_SLUG" --title "$title" \
+        --body-file "$bodyfile" $args)
+    fi
   else
+    local body="Captured by gh-track. No spec yet."
+    [ -n "$header" ] && body="$header
+
+Captured by gh-track. No spec yet."
     # shellcheck disable=SC2086 # args is a deliberately word-split flag list
     url=$(gh issue create --repo "$GHT_SLUG" --title "$title" \
-      --body "Captured by gh-track. No spec yet." $args)
+      --body "$body" $args)
   fi
 
   # The parse now shapes a WRITE -- it is what the board card is built from --
@@ -76,5 +111,10 @@ cmd_new() {
       board_size_set "$number" "$(size_to_field "$size")" || \
         warn "board Size not updated for #$number; labels are still correct"
     fi
+  fi
+
+  if [ -n "$epic" ]; then
+    sub_issue_link "$epic" "$number" \
+      || warn "issue #$number created but not linked as a sub-issue of #$epic"
   fi
 }

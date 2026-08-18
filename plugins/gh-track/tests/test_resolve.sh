@@ -71,5 +71,63 @@ assert_eq "" "$out" "unresolvable branch prints nothing on stdout"
 err=$(ght resolve 2>&1 >/dev/null || true)
 assert_contains "$err" "cannot resolve issue" "the reason goes to stderr"
 
+# --- shared branches: never use the recorded-state fallback ---------------
+
+# A configured shared branch refuses resolve_remember/--set outright, rather
+# than silently recording a pin that would misattribute every future
+# session on that branch.
+printf '%s' '{"sharedBranches":["integration"]}' >.claude/gh-track/config.json
+cfg_load
+git checkout -q -b integration
+assert_exit 2 resolve_remember 4242
+out=$( (resolve_remember 4242) 2>&1 || true)
+assert_contains "$out" "shared branch" "resolve_remember names the reason"
+assert_exit 2 ght resolve --set 4242
+
+# resolve_issue on a shared branch dies with 3, WITHOUT consulting any
+# recorded state -- even one that predates the branch being marked shared.
+# (State is keyed by TOPLEVEL PATH, not branch, so recording it on one
+# branch and reading it from another in the same scratch repo is exactly
+# the scenario being proven here, not an accident of the test.)
+git checkout -q -b spike/pre-existing-record
+resolve_remember 55
+git checkout -q integration
+assert_exit 3 resolve_issue
+out=$( (resolve_issue) 2>&1 || true)
+assert_contains "$out" "shared branch" "resolve_issue on a shared branch never falls through to state"
+
+# An ad-hoc branch that is NOT configured as shared still uses the fallback
+# recorded above (55, from the same path) -- shared-branch handling must not
+# have disabled the fallback mechanism generally, only for shared branches.
+git checkout -q -b spike/still-fine
+assert_eq "55" "$(resolve_issue)" "a non-shared branch still uses the pre-existing fallback"
+resolve_remember 66
+assert_eq "66" "$(resolve_issue)" "and can still overwrite it"
+
+# Default sharedBranches (["main","master"]) applies when the key is unset.
+# -B (not -b): setup_scratch's `git init` may itself have named the
+# scratch repo's initial branch "main" depending on the host's
+# init.defaultBranch, so the branch can already exist here.
+printf '%s' '{}' >.claude/gh-track/config.json
+cfg_load
+git checkout -q -B main
+assert_exit 3 resolve_issue
+out=$( (resolve_issue) 2>&1 || true)
+assert_contains "$out" "shared branch" "main is shared by default"
+git checkout -q -B master
+assert_exit 3 resolve_issue
+
+# --- --clear: the symmetric undo for --set ---------------------------------
+
+printf '%s' '{}' >.claude/gh-track/config.json
+cfg_load
+git checkout -q -b spike/to-clear
+resolve_remember 321
+assert_eq "321" "$(resolve_issue)" "recorded before clearing"
+ght resolve --clear
+assert_exit 3 resolve_issue
+out=$( (resolve_issue) 2>&1 || true)
+assert_contains "$out" "cannot resolve issue" "cleared workspace is unresolvable again"
+
 teardown_scratch
 report

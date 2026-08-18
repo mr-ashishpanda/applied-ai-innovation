@@ -42,8 +42,15 @@ The stage tells you what to do next:
 | `review` | Post `done` once merged |
 | `triage` / `debugging` | Continue `superpowers:systematic-debugging` |
 
-If `ghtrack resolve` fails, the branch does not follow `<issue>-<slug>`. Ask the
-user which issue this is and record it: `ghtrack resolve --set N`.
+If `ghtrack resolve` fails, one of two things is true. If the message names a
+**shared branch** (`main`, `v2`, or whatever the repo's `.sharedBranches`
+config lists), that is expected — no single issue is tracked on a long-lived
+integration branch, and this is not something to fix by recording one. Only on
+an actual per-task branch that just doesn't follow `<issue>-<slug>`, ask the
+user which issue this is and record it: `ghtrack resolve --set N` (undo with
+`ghtrack resolve --clear`). Never run `--set` from a shared branch — it would
+pin one issue to a path that gets reused for every future task, and the tool
+refuses it for exactly that reason.
 
 ## Intake
 
@@ -173,3 +180,5 @@ swallow the failure either — the user needs to know the issue is stale.
 | "gh failed, I should stop" | Report and keep building. |
 | "I'll write the CLAUDE.md rules from memory" | The bootstrap skill copies the template verbatim. |
 | "I'll call gh directly, it's just one command" | Every write goes through `ghtrack`, so it stays idempotent. |
+| "This finding is real but out of scope — I'll just note it in Decisions" | That note dies with the issue's history. Create a tracked issue for it now; see `references/intake.md`. |
+| "This issue belongs under an epic, but plain `ghtrack new` is right there" | Use `ghtrack new --epic E` — it numbers, headers, and links the issue in one step instead of four easy-to-skip manual ones. |

@@ -19,8 +19,11 @@ usage: ghtrack <subcommand> [options]
 
   doctor                              check environment, auth, scopes, config
   init                                create labels, board, and config
-  new --kind K --title T [...]        create an issue at stage:backlog
-  resolve                             print the issue number for this branch
+  new --kind K --title T [--epic E]   create an issue at stage:backlog;
+                                       --epic E numbers it under epic E and
+                                       links it as E's native sub-issue
+  resolve [--set N|--clear]           print the issue number for this branch,
+                                       or record/forget one for this path
   show N                              print issue state as key=value lines
   stage N STAGE                       swap stage label, mirror board Status
   size N s|m|l                        swap size label, mirror board Size
