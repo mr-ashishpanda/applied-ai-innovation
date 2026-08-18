@@ -4,7 +4,7 @@
 # deterministic, idempotent, and testable without a model.
 set -euo pipefail
 
-GHTRACK_VERSION="0.1.0"
+GHTRACK_VERSION="0.2.0"
 
 GHT_SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 GHT_LIB="$GHT_SCRIPTS/lib"
