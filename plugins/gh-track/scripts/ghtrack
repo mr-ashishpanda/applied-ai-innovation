@@ -33,6 +33,7 @@ usage: ghtrack <subcommand> [options]
   split N --plan P --title T [--size S]  create a sub-issue for a spec's 2nd+ plan
   tasks N --plan P                    sync body checklist from a plan
   tick N --task K                     mark checklist item K complete
+  close N [--reason completed|"not planned"]  close the issue (default: completed)
 
   --version                           print version
 EOF
@@ -50,7 +51,7 @@ main() {
   shift
 
   case $sub in
-    doctor|init|new|resolve|show|stage|size|body|comment|link|tasks|tick|split)
+    doctor|init|new|resolve|show|stage|size|body|comment|link|tasks|tick|split|close)
       # shellcheck source=/dev/null
       . "$GHT_LIB/cmd_$sub.sh"
       "cmd_$sub" "$@"
