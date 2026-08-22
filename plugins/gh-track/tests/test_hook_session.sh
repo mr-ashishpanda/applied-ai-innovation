@@ -25,6 +25,7 @@ stub_expect_json 'issue view 42' \
   '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:backlog"}],"body":""}'
 out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
 assert_contains "$out" "brainstorming" "backlog suggests brainstorming"
+assert_contains "$out" "'pickup' checkpoint" "backlog names the pickup checkpoint"
 
 stub_reset
 stub_expect_json 'issue view 42' \
@@ -38,6 +39,24 @@ stub_expect_json 'issue view 42' \
 out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
 assert_contains "$out" "systematic-debugging" "bug triage suggests debugging skill"
 assert_contains "$out" "repro" "triage suggests the repro checkpoint"
+
+# A feature or chore picked up but not yet spec'd sits at the SAME
+# stage:triage label as a bug, but must get brainstorming guidance, not
+# "this is a bug" — the two tracks share the label, not the message.
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:triage"},{"name":"kind:feature"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_contains "$out" "brainstorming" "feature triage suggests brainstorming"
+assert_not_contains "$out" "systematic-debugging" "feature triage's message is distinct from a bug's"
+assert_not_contains "$out" "This is a bug" "feature triage does not call the issue a bug"
+
+stub_reset
+stub_expect_json 'issue view 42' \
+  '{"number":42,"title":"T","state":"OPEN","labels":[{"name":"stage:triage"},{"name":"kind:chore"}],"body":""}'
+out=$(printf '{"cwd":"%s","source":"startup"}' "$SCRATCH" | bash "$HOOK")
+assert_contains "$out" "brainstorming" "chore triage also gets the non-bug message"
+assert_not_contains "$out" "systematic-debugging" "chore triage's message is distinct from a bug's"
 
 stub_reset
 stub_expect_json 'issue view 42' \

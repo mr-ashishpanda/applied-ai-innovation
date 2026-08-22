@@ -35,12 +35,14 @@ The stage tells you what to do next:
 | Stage | Next action |
 |---|---|
 | (no issue) | Read `references/intake.md`. Create the issue before brainstorming. |
-| `backlog` | `superpowers:brainstorming` (feature) or `superpowers:systematic-debugging` (bug) |
+| `backlog` | Not picked up yet. The moment you start, post `pickup` (below) before anything else. |
+| `triage` (feature/chore) | Picked up, no spec yet — `superpowers:brainstorming`, then post `spec` |
+| `triage` (bug) | Picked up, not yet reproduced — `superpowers:systematic-debugging`, then post `repro` |
 | `spec` | `superpowers:writing-plans` |
 | `planned` | Execute — `superpowers:subagent-driven-development` or `superpowers:executing-plans` |
 | `building` | Tick checklist items as tasks land |
 | `review` | Post `done` once merged |
-| `triage` / `debugging` | Continue `superpowers:systematic-debugging` |
+| `debugging` | Continue `superpowers:systematic-debugging`; post `root-cause` once found |
 
 If `ghtrack resolve` fails, one of two things is true. If the message names a
 **shared branch** (`main`, `v2`, or whatever the repo's `.sharedBranches`
@@ -81,17 +83,28 @@ already would:
 templates. Use them as written — they are short by design.
 
 Six core events, each with a fixed shape, plus the `split` variant of `plan`
-for a second-or-later plan on the same issue:
+for a second-or-later plan on the same issue, and the lightweight `pickup`
+event below that precedes all of them:
 
 | Event | When | Also do |
 |---|---|---|
+| `pickup` | Work is picked up — brainstorming or triage begins, before any artifact exists | `ghtrack stage N triage` (no comment — starting work is not yet a decision) |
 | `spec` | A design doc was written and committed | `ghtrack stage N spec`, add the spec link to the body |
 | `plan` | A plan was written and committed | `ghtrack stage N planned`, `ghtrack tasks N --plan FILE`, `ghtrack size N s\|m\|l` |
 | `plan` (2nd+ for this issue) | A second plan was written for the same spec | `ghtrack split ISSUE --plan FILE --title T`, then run the `plan` checkpoint steps below against the **new sub-issue number**, and post a `split` comment on the parent (see `references/issue-anatomy.md`) |
 | `build-started` | Execution begins | `ghtrack stage N building` |
 | `scope-change` | Agreed scope changed | Revise spec/plan, re-run `ghtrack tasks`, add a `## Decisions` line |
 | `blocked` | You cannot proceed | Add the `blocked` label |
-| `done` | Merged | `ghtrack stage N done`, rewrite body links to the default branch, close the issue |
+| `done` | Merged | `ghtrack stage N done`, rewrite body links to the default branch, `ghtrack close N` |
+
+`pickup` reuses the `triage` stage for every kind, not only bugs: a feature
+or chore that has been picked up but has no spec yet sits at `stage:triage`
+exactly like a bug being investigated does — the label is shared, the next
+action is not (see the stage table above and `references/intake.md`).
+Without this event, an issue sits at `stage:backlog` — indistinguishable
+from "nobody has looked at this" — for the entire brainstorming or triage
+conversation, however long it runs, and only ever moves once the first
+artifact (spec, plan, or repro) is committed.
 
 ### When a plan checkpoint fires for the SECOND time on one issue
 

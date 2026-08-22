@@ -16,9 +16,9 @@ Pick the kind, which decides the track:
 
 | Kind | Track | First superpowers skill |
 |---|---|---|
-| `feature` | spec → planned → building → review → done | `superpowers:brainstorming` |
+| `feature` | triage → spec → planned → building → review → done | `superpowers:brainstorming` |
 | `bug` | triage → debugging → building → review → done | `superpowers:systematic-debugging` |
-| `chore` | planned → building → review → done | `superpowers:writing-plans` |
+| `chore` | triage → planned → building → review → done | `superpowers:writing-plans` |
 
 Create it before any brainstorming or debugging:
 
@@ -28,10 +28,15 @@ ghtrack new --kind feature --title "Short imperative title"
 
 The issue starts at `stage:backlog`. Then:
 
-- **Starting work now?** Create the branch `<issue>-<slug>`, then advance the
-  stage as the work reaches each checkpoint.
-- **Capturing for later?** Stop here. No branch, no spec, no brainstorming. A
-  one-line requirement at `stage:backlog` is a complete, valid backlog item.
+- **Starting work now?** Create the branch `<issue>-<slug>`, post the
+  `pickup` checkpoint (`ghtrack stage N triage`) **before** brainstorming,
+  triaging, or writing a plan — this is what moves the board from untouched
+  Backlog to Todo the moment someone actually picks the item up, rather than
+  only once the first artifact (spec, plan, or repro) is committed. Then
+  advance the stage as the work reaches each further checkpoint.
+- **Capturing for later?** Stop here. No branch, no spec, no brainstorming, no
+  `pickup` checkpoint. A one-line requirement at `stage:backlog` is a
+  complete, valid backlog item.
 
 ## Capture-only intake
 

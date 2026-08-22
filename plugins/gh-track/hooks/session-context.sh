@@ -55,11 +55,17 @@ state=$(get state)
 
 case $stage in
   backlog)
-    next="This work has no spec yet. Start with superpowers:brainstorming, then post the 'spec' checkpoint." ;;
+    next="Not picked up yet. The moment you start brainstorming or triaging this, post the 'pickup' checkpoint (ghtrack stage $issue triage) so the board shows it as Todo instead of untouched Backlog - then start with superpowers:brainstorming (feature/chore) or superpowers:systematic-debugging (bug), and post 'spec' (or 'repro') once you have an artifact." ;;
   spec)
     next="A spec exists. Next is superpowers:writing-plans, then post the 'plan' checkpoint." ;;
   triage)
-    next="This is a bug in triage. Use superpowers:systematic-debugging; post the 'repro' checkpoint once reproduced." ;;
+    case $kind in
+      bug)
+        next="This is a bug in triage. Use superpowers:systematic-debugging; post the 'repro' checkpoint once reproduced." ;;
+      *)
+        next="Picked up, not yet spec'd. Use superpowers:brainstorming; post the 'spec' checkpoint once the design doc is written and committed." ;;
+    esac
+    ;;
   debugging)
     next="Root cause hunt in progress. Post the 'root-cause' checkpoint when found, then move to stage building." ;;
   planned)
