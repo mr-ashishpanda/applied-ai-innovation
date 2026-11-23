@@ -1,0 +1,9 @@
+# attention-alarm settings (bash). Edit freely; takes effect on the next alarm.
+# Sounds: any file afplay can play (aiff/mp3/wav/m4a). Built-ins: ls /System/Library/Sounds
+SOUND_DONE="/System/Library/Sounds/Glass.aiff"     # Claude finished its turn
+SOUND_NEEDED="/System/Library/Sounds/Sosumi.aiff"  # permission prompt / question for you
+VOLUME="1.0"            # 0.0 - 1.0 (higher amplifies)
+INTERVAL="1.5"          # seconds between repeats
+MAX_SECONDS="30"        # auto-stop after this many seconds
+SHOW_NOTIFICATION="1"   # 1 = also show a macOS notification banner
+ENABLED="1"             # 0 = mute all alarms without uninstalling

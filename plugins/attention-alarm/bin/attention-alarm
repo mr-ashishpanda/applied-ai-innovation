@@ -1,0 +1,96 @@
+#!/bin/bash
+# attention-alarm: ring an alarm when Claude Code needs you, stop it when you respond.
+#
+#   attention-alarm start       (hook) start ringing for the session in the hook JSON on stdin
+#   attention-alarm stop        (hook) stop ringing for the session in the hook JSON on stdin
+#   attention-alarm stop-all    stop every ringing alarm (alias: hush)
+#   attention-alarm test        ring once now so you can hear it
+#
+# Optional settings: ~/.attention-alarm/config (sourced as bash), shared by every
+# Claude Code profile. See config.example next to this plugin's bin/ directory.
+
+set -u
+HOME_DIR="$HOME/.attention-alarm"
+STATE_DIR="$HOME_DIR/state"
+mkdir -p "$STATE_DIR"
+
+# Defaults, overridable in config
+SOUND_DONE="/System/Library/Sounds/Glass.aiff"     # Claude finished its turn
+SOUND_NEEDED="/System/Library/Sounds/Sosumi.aiff"  # permission prompt / question for you
+VOLUME="1.0"            # afplay volume, 0.0 - 1.0+
+INTERVAL="1.5"          # seconds of silence between repeats
+MAX_SECONDS="30"        # give up ringing after this long
+SHOW_NOTIFICATION="1"   # also post a macOS notification banner
+ENABLED="1"             # set to 0 to mute without uninstalling
+[ -f "$HOME_DIR/config" ] && . "$HOME_DIR/config"
+
+read_hook_input() {
+  if [ -t 0 ]; then INPUT='{}'; else INPUT="$(cat)"; fi
+  SID="$(printf '%s' "$INPUT" | jq -r '.session_id // "manual"' 2>/dev/null || echo manual)"
+  EVENT="$(printf '%s' "$INPUT" | jq -r '.hook_event_name // ""' 2>/dev/null)"
+  MSG="$(printf '%s' "$INPUT" | jq -r '.message // ""' 2>/dev/null)"
+  CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)"
+  SID="${SID//[^A-Za-z0-9_-]/}"   # safe as a filename
+}
+
+stop_pidfile() {
+  local f="$1" pid
+  [ -f "$f" ] || return 0
+  pid="$(cat "$f" 2>/dev/null)"
+  [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null
+  rm -f "$f"
+}
+
+ring_loop() {   # runs detached: ring_loop <sound>
+  local sound="$1" max="${2:-$MAX_SECONDS}" player="" sleeper=""
+  trap '[ -n "$player" ] && kill "$player" 2>/dev/null; [ -n "$sleeper" ] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT HUP
+  local end=$((SECONDS + max))
+  while [ "$SECONDS" -lt "$end" ]; do
+    afplay -v "$VOLUME" "$sound" & player=$!; wait "$player"; player=""
+    sleep "$INTERVAL" & sleeper=$!; wait "$sleeper"; sleeper=""
+  done
+}
+
+notify() {
+  [ "$SHOW_NOTIFICATION" = "1" ] || return 0
+  local title="Claude Code" body="$1"
+  [ -n "$CWD" ] && title="Claude Code — $(basename "$CWD")"
+  osascript -e "display notification \"${body//\"/\\\"}\" with title \"${title//\"/\\\"}\"" >/dev/null 2>&1 &
+}
+
+case "${1:-}" in
+  start)
+    read_hook_input
+    [ "$ENABLED" = "1" ] || exit 0
+    if [ "$EVENT" = "Notification" ]; then
+      sound="$SOUND_NEEDED"; text="${MSG:-Claude needs your input}"
+    else
+      sound="$SOUND_DONE"; text="Finished — waiting for you"
+    fi
+    stop_pidfile "$STATE_DIR/$SID.pid"
+    nohup "$0" _loop "$sound" </dev/null >/dev/null 2>&1 &
+    echo $! > "$STATE_DIR/$SID.pid"
+    notify "$text"
+    ;;
+  stop)
+    read_hook_input
+    stop_pidfile "$STATE_DIR/$SID.pid"
+    ;;
+  stop-all|hush)
+    for f in "$STATE_DIR"/*.pid; do stop_pidfile "$f"; done
+    pkill -f "attention-alarm _loop" 2>/dev/null
+    ;;
+  test)
+    CWD=""; SID="test"
+    stop_pidfile "$STATE_DIR/$SID.pid"
+    nohup "$0" _loop "$SOUND_DONE" 5 </dev/null >/dev/null 2>&1 &
+    echo $! > "$STATE_DIR/$SID.pid"
+    notify "Test alarm (rings ~5s; run 'hush' to stop early)"
+    ;;
+  _loop)
+    ring_loop "$2" "${3:-}"
+    ;;
+  *)
+    sed -n '2,10p' "$0"; exit 1 ;;
+esac
+exit 0

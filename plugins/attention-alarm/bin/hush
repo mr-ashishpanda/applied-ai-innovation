@@ -1,0 +1,5 @@
+#!/bin/bash
+# hush: stop every ringing attention-alarm, in every session and profile.
+pkill -f "attention-alarm _loop" 2>/dev/null
+rm -f "$HOME/.attention-alarm/state/"*.pid 2>/dev/null
+exit 0
