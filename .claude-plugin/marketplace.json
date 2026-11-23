@@ -9,7 +9,9 @@
     {
       "name": "gh-track",
       "description": "GitHub issue and project tracking for superpowers development workflows.",
-      "author": { "name": "Ashish Panda" },
+      "author": {
+        "name": "Ashish Panda"
+      },
       "category": "workflow",
       "source": "./plugins/gh-track",
       "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/gh-track"
@@ -17,10 +19,22 @@
     {
       "name": "ssm-ssh-access",
       "description": "SSH/SCP into private AWS EC2 instances by instance ID over SSM Session Manager - no bastion, no open port 22, no VPN.",
-      "author": { "name": "Ashish Panda" },
+      "author": {
+        "name": "Ashish Panda"
+      },
       "category": "devops",
       "source": "./plugins/ssm-ssh-access",
       "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/ssm-ssh-access"
+    },
+    {
+      "name": "attention-alarm",
+      "description": "Rings a repeating alarm when Claude finishes or needs your permission/input; silences when you respond, on `hush`, or after 30s.",
+      "author": {
+        "name": "Ashish Panda"
+      },
+      "category": "productivity",
+      "source": "./plugins/attention-alarm",
+      "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/attention-alarm"
     }
   ]
 }

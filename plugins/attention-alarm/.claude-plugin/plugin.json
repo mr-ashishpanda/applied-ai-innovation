@@ -1,0 +1,12 @@
+{
+  "name": "attention-alarm",
+  "description": "Rings a repeating alarm (plus a macOS notification) when Claude finishes a turn or needs your permission or input, and silences it the moment you respond. Stop it anytime with `hush`; auto-stops after 30s.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ashish Panda"
+  },
+  "homepage": "https://github.com/mr-ashishpanda/applied-ai-innovation/tree/master/plugins/attention-alarm",
+  "repository": "https://github.com/mr-ashishpanda/applied-ai-innovation",
+  "license": "MIT",
+  "keywords": ["notification", "alarm", "sound", "hooks", "attention", "macos"]
+}
